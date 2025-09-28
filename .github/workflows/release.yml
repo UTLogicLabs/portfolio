@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm run test:all
+
+      - name: Build application
+        run: npm run build
+
+      - name: Create build archive
+        run: |
+          tar -czf portfolio-${{ github.ref_name }}.tar.gz dist/
+          zip -r portfolio-${{ github.ref_name }}.zip dist/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ -f CHANGELOG.md ]; then
+            echo "changelog<<EOF" >> $GITHUB_OUTPUT
+            cat CHANGELOG.md >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "changelog=No changelog available." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: |
+            ## 🚀 Portfolio Release ${{ github.ref_name }}
+            
+            ### What's New
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### 📦 Assets
+            - `portfolio-${{ github.ref_name }}.tar.gz` - Production build (tar.gz)
+            - `portfolio-${{ github.ref_name }}.zip` - Production build (zip)
+            
+            ### 🔗 Deployment
+            This version has been automatically deployed to production.
+            
+            ---
+            **Full Changelog**: https://github.com/${{ github.repository }}/compare/v1.0.0...${{ github.ref_name }}
+          files: |
+            portfolio-${{ github.ref_name }}.tar.gz
+            portfolio-${{ github.ref_name }}.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  deploy-release:
+    name: Deploy Release
+    runs-on: ubuntu-latest
+    needs: release
+    environment:
+      name: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Deploy to production
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: './dist'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Production release ${{ github.ref_name }}"
+          enable-pull-request-comment: false
+          enable-commit-comment: true
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
