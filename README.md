@@ -160,7 +160,15 @@ The portfolio is built with a mobile-first approach:
 1. Enable GitHub Pages in repository settings
 2. Use GitHub Actions for automated deployment
 
-## 📄 License
+## � Documentation
+
+For detailed project documentation, see the [`documents/`](documents/) folder:
+
+- **[Project Requirements](documents/PROJECT_REQUIREMENTS.md)** - Comprehensive feature requirements and specifications
+- **[Icon Integration Guide](documents/ICON_INTEGRATION.md)** - How to use and extend the icon system
+- **[CI/CD Documentation](documents/CI_CD_DOCUMENTATION.md)** - GitHub Actions pipeline documentation
+
+## �📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
