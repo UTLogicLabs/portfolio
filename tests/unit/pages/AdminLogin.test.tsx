@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import userEvent from '@testing-library/user-event';
 import { AdminLogin } from '@/pages/AdminLogin';
+import { AdminAuthProvider } from '@/components/AdminAuthProvider';
 
 // Mock the Icon component
 vi.mock('@/components/ui/Icon', () => ({
@@ -23,29 +25,40 @@ describe('AdminLogin', () => {
     vi.restoreAllMocks();
   });
 
+  // Helper function to render AdminLogin with Router and AdminAuth context
+  const renderWithRouter = (initialEntries = ['/admin/login']) => {
+    return render(
+      <MemoryRouter initialEntries={initialEntries}>
+        <AdminAuthProvider>
+          <AdminLogin />
+        </AdminAuthProvider>
+      </MemoryRouter>
+    );
+  };
+
   describe('Component Structure', () => {
     it('should render the login form', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByRole('heading', { name: /admin login/i })).toBeInTheDocument();
       expect(screen.getByText('Enter your credentials to access the admin dashboard')).toBeInTheDocument();
     });
 
     it('should render username and password fields', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
       expect(screen.getByLabelText(/password/i)).toBeInTheDocument();
     });
 
     it('should render login button', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByRole('button', { name: /login/i })).toBeInTheDocument();
     });
 
     it('should render back to website link', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const backLink = screen.getByRole('link', { name: /back to website/i });
       expect(backLink).toBeInTheDocument();
@@ -53,7 +66,7 @@ describe('AdminLogin', () => {
     });
 
     it('should render demo credentials', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByText('Demo credentials:')).toBeInTheDocument();
       expect(screen.getByText('Username: admin')).toBeInTheDocument();
@@ -63,19 +76,19 @@ describe('AdminLogin', () => {
 
   describe('Icons', () => {
     it('should render arrow-left icon in back link', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByTestId('icon-arrow-left')).toBeInTheDocument();
     });
 
     it('should render person icon in username field', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByTestId('icon-person')).toBeInTheDocument();
     });
 
     it('should render lock icon in password field', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       expect(screen.getByTestId('icon-lock')).toBeInTheDocument();
     });
@@ -84,7 +97,7 @@ describe('AdminLogin', () => {
   describe('Form Interaction', () => {
     it('should update username field value', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i) as HTMLInputElement;
       
@@ -95,7 +108,7 @@ describe('AdminLogin', () => {
 
     it('should update password field value', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const passwordField = screen.getByLabelText(/password/i) as HTMLInputElement;
       
@@ -105,7 +118,7 @@ describe('AdminLogin', () => {
     });
 
     it('should require both username and password fields', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -118,7 +131,7 @@ describe('AdminLogin', () => {
   describe('Authentication', () => {
     it('should show loading state during login', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -136,7 +149,7 @@ describe('AdminLogin', () => {
 
     it('should disable form fields during loading', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -154,7 +167,7 @@ describe('AdminLogin', () => {
 
     it('should show success message for valid credentials', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -174,7 +187,7 @@ describe('AdminLogin', () => {
 
     it('should show error for invalid credentials', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -191,7 +204,7 @@ describe('AdminLogin', () => {
 
     it('should clear previous errors on new login attempt', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -221,7 +234,7 @@ describe('AdminLogin', () => {
   describe('Error Handling', () => {
     it('should display error with proper styling', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -241,7 +254,7 @@ describe('AdminLogin', () => {
 
   describe('Accessibility', () => {
     it('should have proper labels for form fields', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -252,7 +265,7 @@ describe('AdminLogin', () => {
 
     it('should have role="alert" for error messages', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -269,7 +282,7 @@ describe('AdminLogin', () => {
     });
 
     it('should have proper input attributes', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);
@@ -285,7 +298,7 @@ describe('AdminLogin', () => {
     describe('Form Submission', () => {
     it('should handle form submission correctly', async () => {
       const user = userEvent.setup();
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameInput = screen.getByLabelText(/username/i);
       const passwordInput = screen.getByLabelText(/password/i);
@@ -306,21 +319,21 @@ describe('AdminLogin', () => {
 
   describe('Layout and Styling', () => {
     it('should have correct container classes', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const mainContainer = screen.getByText('Admin Login').closest('.min-h-screen');
       expect(mainContainer).toHaveClass('min-h-screen', 'flex', 'flex-col', 'bg-background');
     });
 
     it('should center the login form', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const formContainer = screen.getByText('Admin Login').closest('.w-full');
       expect(formContainer).toHaveClass('w-full', 'max-w-md', 'space-y-6');
     });
 
     it('should style input fields consistently', () => {
-      render(<AdminLogin />);
+      renderWithRouter();
       
       const usernameField = screen.getByLabelText(/username/i);
       const passwordField = screen.getByLabelText(/password/i);

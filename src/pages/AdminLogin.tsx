@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { flushSync } from 'react-dom';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
+import { useAdminAuth } from '../hooks/useAdminAuth';
 
 export function AdminLogin() {
   const [formData, setFormData] = useState({
     username: '',
     password: ''
   });
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const usernameRef = useRef<HTMLInputElement>(null);
+  const navigate = useNavigate();
+  const { login, isLoading, isAuthenticated } = useAdminAuth();
 
   // Set page title and focus username field
   useEffect(() => {
@@ -29,6 +29,13 @@ export function AdminLogin() {
     };
   }, []);
 
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/admin/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({
       ...prev,
@@ -39,35 +46,19 @@ export function AdminLogin() {
   };
 
   const handleLogin = async () => {
-    // Set loading immediately and force synchronous update for tests
-    flushSync(() => {
-      setIsLoading(true);
-      setError('');
-      setSuccess('');
-    });
-
-    // Add a small delay to ensure the loading state is visible
-    await new Promise(resolve => setTimeout(resolve, 50));
+    setError('');
 
     try {
-      // Simulate API call delay - longer delay to allow tests to catch loading state
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Demo authentication logic
-      if (formData.username === 'admin' && formData.password === 'password123') {
-        setSuccess('Login successful! Redirecting...');
-        // Simulate redirect delay
-        setTimeout(() => {
-          // In a real app, this would redirect to the admin dashboard
-          console.log('Redirecting to admin dashboard...');
-        }, 1500);
+      const success = await login(formData.username, formData.password);
+      
+      if (success) {
+        // Navigate to dashboard - the useEffect will handle this
+        navigate('/admin/dashboard');
       } else {
         setError('Invalid username or password');
       }
     } catch (err) {
       setError('An error occurred during login. Please try again.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -101,14 +92,7 @@ export function AdminLogin() {
             </div>
           )}
 
-          {success && (
-            <div 
-              role="alert"
-              className="p-3 text-sm text-green-600 bg-green-50 border border-green-200 rounded-md"
-            >
-              {success}
-            </div>
-          )}
+
 
           <form className="space-y-4">
             <div className="space-y-2">
