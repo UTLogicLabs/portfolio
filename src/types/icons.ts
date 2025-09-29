@@ -18,6 +18,9 @@ export type IconName =
   | 'cross'
   | 'plus'
   | 'image'
-  | 'upload';
+  | 'upload'
+  | 'arrow-left'
+  | 'lock'
+  | 'person';
 
 // Add more icon names as you add them to your sprite
