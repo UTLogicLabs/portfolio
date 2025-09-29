@@ -16,6 +16,8 @@ export type IconName =
   | 'file-text'
   | 'phone'
   | 'cross'
-  | 'plus';
+  | 'plus'
+  | 'image'
+  | 'upload';
 
 // Add more icon names as you add them to your sprite
