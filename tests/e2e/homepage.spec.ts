@@ -12,7 +12,13 @@ test.describe('Homepage', () => {
   test('should have working navigation', async ({ page }) => {
     await page.goto('/');
     
-    // Test navigation links
+    // Test navigation exists in the DOM (may be hidden on mobile)
+    await expect(page.locator('nav a[href="#about"]')).toHaveCount(1);
+    await expect(page.locator('nav a[href="#projects"]')).toHaveCount(1);
+    await expect(page.locator('nav a[href="#contact"]')).toHaveCount(1);
+    
+    // Test navigation links are visible on desktop
+    await page.setViewportSize({ width: 1024, height: 768 });
     await expect(page.locator('nav a[href="#about"]')).toBeVisible();
     await expect(page.locator('nav a[href="#projects"]')).toBeVisible();
     await expect(page.locator('nav a[href="#contact"]')).toBeVisible();
@@ -30,6 +36,24 @@ test.describe('Homepage', () => {
     
     // Check if dark class is applied
     await expect(page.locator('html')).toHaveClass(/dark/);
+  });
+
+  test('should handle mobile navigation', async ({ page }) => {
+    // Test mobile viewport
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto('/');
+    
+    // On mobile, navigation links should be in the DOM but may be hidden
+    await expect(page.locator('nav a[href="#about"]')).toHaveCount(1);
+    
+    // Check if there's a mobile menu toggle (if it exists)
+    const mobileMenuToggle = page.locator('button[aria-label*="menu"], button[aria-label*="Menu"], [data-testid="mobile-menu-toggle"]');
+    const mobileMenuExists = await mobileMenuToggle.count() > 0;
+    
+    if (mobileMenuExists) {
+      await mobileMenuToggle.click();
+      await expect(page.locator('nav a[href="#about"]')).toBeVisible();
+    }
   });
 
   test('should be responsive', async ({ page }) => {
