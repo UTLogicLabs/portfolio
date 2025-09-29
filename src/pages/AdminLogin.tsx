@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAdminAuth } from '../hooks/useAdminAuth';
+import { Icon } from '@/components/ui';
 
 export function AdminLogin() {
   const [formData, setFormData] = useState({
@@ -70,7 +71,8 @@ export function AdminLogin() {
           className="inline-flex items-center text-sm font-medium text-muted-foreground hover:text-foreground"
           tabIndex={-1}
         >
-          ← Back to Website
+          <Icon name="arrow-left" className="mr-2" />
+          Back to Website
         </Link>
       </div>
       
@@ -99,37 +101,43 @@ export function AdminLogin() {
               <label htmlFor="username" className="text-sm font-medium">
                 Username
               </label>
-              <input
-                ref={usernameRef}
-                id="username"
-                name="username"
-                type="text"
-                value={formData.username}
-                onChange={handleInputChange}
-                disabled={isLoading}
-                aria-disabled={isLoading}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="admin"
-                required
-              />
+              <div className="relative">
+                <Icon name="person" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+                <input
+                  ref={usernameRef}
+                  id="username"
+                  name="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                  aria-disabled={isLoading}
+                  className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="admin"
+                  required
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
               <label htmlFor="password" className="text-sm font-medium">
                 Password
               </label>
-              <input
-                id="password"
-                name="password"
-                type="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                disabled={isLoading}
-                aria-disabled={isLoading}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                placeholder="••••••••"
-                required
-              />
+              <div className="relative">
+                <Icon name="lock" className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground" size={16} />
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleInputChange}
+                  disabled={isLoading}
+                  aria-disabled={isLoading}
+                  className="flex h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
             </div>
 
             <button

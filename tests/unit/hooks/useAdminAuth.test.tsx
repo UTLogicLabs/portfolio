@@ -1,18 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, renderHook, act, waitFor } from '@testing-library/react';
 import { ReactNode } from 'react';
-
-// Mock the hooks and components since they may not exist yet
-vi.mock('../../src/hooks/useAdminAuth', () => ({
-  useAdminAuth: vi.fn(),
-}));
-
-vi.mock('../../src/components/AdminAuthProvider', () => ({
-  AdminAuthProvider: ({ children }: { children: ReactNode }) => children,
-}));
-
-// Mock implementation of useAdminAuth
-const mockUseAdminAuth = vi.fn();
+import { AdminAuthProvider } from '@/components/AdminAuthProvider';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 
 // Mock localStorage
 const localStorageMock = {
@@ -24,7 +14,11 @@ const localStorageMock = {
 
 Object.defineProperty(window, 'localStorage', {
   value: localStorageMock,
+  writable: true,
 });
+
+// Mock setTimeout to make tests faster
+vi.mock('timers');
 
 // Wrapper component for testing
 const wrapper = ({ children }: { children: ReactNode }) => (

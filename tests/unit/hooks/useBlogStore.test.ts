@@ -83,10 +83,11 @@ const createMockBlogStore = () => {
     
     // Search and filter
     searchPosts: vi.fn((query: string) => {
+      const trimmedQuery = query.trim();
       return posts.filter(post =>
-        post.title.toLowerCase().includes(query.toLowerCase()) ||
-        post.content.toLowerCase().includes(query.toLowerCase()) ||
-        post.tags.some(tag => tag.toLowerCase().includes(query.toLowerCase()))
+        post.title.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        post.content.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+        post.tags.some(tag => tag.toLowerCase().includes(trimmedQuery.toLowerCase()))
       );
     }),
     
@@ -145,7 +146,7 @@ describe('useBlogStore Hook', () => {
       expect(stats.totalPosts).toBe(2);
       expect(stats.publishedPosts).toBe(1);
       expect(stats.draftPosts).toBe(1);
-      expect(stats.totalTags).toBe(3); // React, TypeScript, JavaScript, Web -> unique = 4, but let's check
+      expect(stats.totalTags).toBe(4); // React, TypeScript, JavaScript, Web -> unique = 4
     });
 
     it('should update statistics after adding posts', () => {
