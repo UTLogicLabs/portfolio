@@ -1,6 +1,63 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Icon } from '@/components/ui';
+import React from 'react';
+import { Header } from '@/components/layout/Header';
+import { Footer } from '@/components/layout/Footer';
+import type { BlogPost } from '@/types';
+import { BlogSection } from '@/components/BlogSection';
+
+
+const blogPosts: BlogPost[] = [
+    {
+      id: '1',
+      title: 'Building Scalable React Applications: Best Practices',
+      content: '# Building Scalable React Applications\n\nThis is a sample markdown content...',
+      excerpt: 'Learn how to structure your React applications for scalability, maintainability, and performance. This guide covers component design, state management, and optimization techniques.',
+      coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      publishedAt: new Date('2023-06-15'),
+      updatedAt: new Date('2023-06-15'),
+      readTime: '8 min read',
+      tags: ['React', 'Web Development', 'JavaScript'],
+      status: 'published',
+      author: 'Joshua Dix',
+      views: 243,
+      slug: 'building-scalable-react-applications',
+      featured: true
+    },
+    {
+      id: '2',
+      title: 'TypeScript Tips for JavaScript Developers',
+      excerpt: "Make the transition from JavaScript to TypeScript smoother with these practical tips and tricks. Discover how to leverage TypeScript's type system to write more robust code.",
+      coverImage: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      publishedAt: new Date('2023-05-22'),
+      updatedAt: new Date('2023-05-22'),
+      readTime: '6 min read',
+      slug: 'typescript-tips-for-javascript-developers',
+      content: '',
+      author: 'Joshua Dix',
+      status: 'draft',
+      tags: ['TypeScript', 'JavaScript', 'Web Development'],
+      views: 0,
+      featured: false
+    },
+    {
+      id: '3',
+      title: 'Optimizing Web Performance: The Ultimate Guide',
+      excerpt: 'Explore techniques for improving website performance, from code splitting and lazy loading to image optimization and caching strategies. Learn how to deliver a faster user experience.',
+      coverImage: 'https://images.unsplash.com/photo-1504639725590-34d0984388bd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
+      publishedAt: new Date('2023-04-10'),
+      updatedAt: new Date('2023-04-10'),
+      readTime: '10 min read',
+      slug: 'optimizing-web-performance',
+      content: '',
+      author: 'Joshua Dix',
+      status: 'published',
+      tags: ['Performance', 'Web Development'],
+      views: 0,
+      featured: false
+    }
+  ];
 
 export function HomePage() {
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -89,30 +146,8 @@ export function HomePage() {
         </section>
 
         {/* Projects Section Placeholder */}
-        <section id="projects" className="py-20 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-6xl mx-auto">
-            <h3 className="text-3xl font-bold text-center mb-12">Featured Projects</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {/* Project cards will be added here */}
-              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg overflow-hidden border border-gray-200 dark:border-gray-700">
-                <div className="p-6">
-                  <h4 className="text-xl font-semibold mb-3">Project Coming Soon</h4>
-                  <p className="text-gray-600 dark:text-gray-300 mb-4">
-                    Exciting projects are in development. Check back soon!
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <span className="px-3 py-1 text-xs bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 rounded-full">
-                      React
-                    </span>
-                    <span className="px-3 py-1 text-xs bg-primary-100 dark:bg-primary-900 text-primary-800 dark:text-primary-200 rounded-full">
-                      TypeScript
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <BlogSection blogPosts={blogPosts} />
+        
 
         {/* Contact Section Placeholder */}
         <section id="contact" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-800">

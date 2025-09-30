@@ -23,6 +23,12 @@ export interface BlogPost {
   publishedAt: Date;
   updatedAt: Date;
   featured: boolean;
+  // Additional fields from BlogStore
+  coverImage: string;
+  author: string;
+  readTime: string;
+  status: 'draft' | 'published';
+  views: number;
 }
 
 export interface ContactFormData {

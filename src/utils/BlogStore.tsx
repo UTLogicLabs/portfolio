@@ -1,18 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-export interface BlogPost {
-  id: string;
-  title: string;
-  content: string;
-  excerpt: string;
-  coverImage: string;
-  date: string;
-  readTime: string;
-  status: 'draft' | 'published';
-  tags: string[];
-  views: number;
-  url: string;
-}
+import { BlogPost } from '@/types';
 
 export interface BlogTag {
   id: string;
@@ -88,12 +75,15 @@ export const BlogStoreProvider = ({ children }: BlogStoreProviderProps) => {
           content: '# Building Scalable React Applications\n\nThis is a sample markdown content...',
           excerpt: 'Learn how to structure your React applications for scalability, maintainability, and performance.',
           coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-          date: 'June 15, 2023',
+          publishedAt: new Date('2023-06-15'),
+          updatedAt: new Date('2023-06-15'),
           readTime: '8 min read',
           status: 'published',
+          author: 'Joshua Dix',
           tags: ['React', 'Web Development', 'JavaScript'],
           views: 243,
-          url: '/blog/building-scalable-react-applications'
+          slug: 'building-scalable-react-applications',
+          featured: true
         },
         {
           id: '2',
@@ -101,12 +91,15 @@ export const BlogStoreProvider = ({ children }: BlogStoreProviderProps) => {
           content: '# TypeScript Tips for JavaScript Developers\n\nThis is a sample markdown content...',
           excerpt: 'Make the transition from JavaScript to TypeScript smoother with these practical tips and tricks.',
           coverImage: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-          date: 'May 22, 2023',
+          publishedAt: new Date('2023-05-22'),
+          updatedAt: new Date('2023-05-22'),
           readTime: '6 min read',
           status: 'published',
+          author: 'Joshua Dix',
           tags: ['TypeScript', 'JavaScript', 'Web Development'],
           views: 187,
-          url: '/blog/typescript-tips-for-javascript-developers'
+          slug: 'typescript-tips-for-javascript-developers',
+          featured: false
         }
       ];
       setPosts(samplePosts);
@@ -163,23 +156,19 @@ export const BlogStoreProvider = ({ children }: BlogStoreProviderProps) => {
     popularTags: [...tags].sort((a, b) => b.count - a.count).slice(0, 5)
   };
 
-  const addPost = (postData: Omit<BlogPost, 'id' | 'date' | 'views'>) => {
+  const addPost = (postData: Omit<BlogPost, 'id' | 'publishedAt' | 'updatedAt' | 'views'>) => {
     const now = new Date();
-    const formattedDate = now.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
     const slug = generateSlug(postData.title);
     const readTime = calculateReadTime(postData.content);
 
     const newPost: BlogPost = {
       ...postData,
       id: generateId(),
-      date: formattedDate,
+      publishedAt: now,
+      updatedAt: now,
       views: 0,
       readTime,
-      url: `/blog/${slug}`
+      slug
     };
 
     setPosts(prevPosts => [...prevPosts, newPost]);

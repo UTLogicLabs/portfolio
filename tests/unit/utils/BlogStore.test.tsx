@@ -1,7 +1,8 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ReactNode } from 'react';
-import { BlogStoreProvider, useBlogStore, BlogPost, BlogTag } from '@/utils/BlogStore';
+import { BlogStoreProvider, useBlogStore, BlogTag } from '@/utils/BlogStore';
+import { BlogPost } from '@/types';
 
 // Mock localStorage
 const localStorageMock = {
