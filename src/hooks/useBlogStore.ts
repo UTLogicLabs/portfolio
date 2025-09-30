@@ -1,17 +1,5 @@
 import { useState } from 'react';
-
-export interface BlogPost {
-  id: string;
-  title: string;
-  excerpt: string;
-  content: string;
-  coverImage: string;
-  date: string;
-  status: 'draft' | 'published';
-  tags: string[];
-  views: number;
-  author: string;
-}
+import { BlogPost } from '@/types';
 
 export interface BlogTag {
   id: string;
@@ -35,11 +23,15 @@ const mockPosts: BlogPost[] = [
     excerpt: 'Learn how to set up a modern React application with TypeScript for better development experience.',
     content: 'Full content here...',
     coverImage: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=300&h=200&fit=crop',
-    date: '2024-03-15',
+    publishedAt: new Date('2024-03-15'),
+    updatedAt: new Date('2024-03-15'),
+    readTime: '8 min read',
     status: 'published',
     tags: ['React', 'TypeScript', 'Web Development'],
     views: 1250,
-    author: 'Joshua Dix'
+    author: 'Joshua Dix',
+    slug: 'getting-started-with-react-and-typescript',
+    featured: true
   },
   {
     id: '2',
@@ -47,11 +39,15 @@ const mockPosts: BlogPost[] = [
     excerpt: 'Discover the power of utility-first CSS framework for rapid UI development.',
     content: 'Full content here...',
     coverImage: 'https://images.unsplash.com/photo-1517180102446-f3ece451e9d8?w=300&h=200&fit=crop',
-    date: '2024-03-10',
+    publishedAt: new Date('2024-03-10'),
+    updatedAt: new Date('2024-03-10'),
+    readTime: '6 min read',
     status: 'published',
     tags: ['CSS', 'Tailwind', 'Design'],
     views: 980,
-    author: 'Joshua Dix'
+    author: 'Joshua Dix',
+    slug: 'building-modern-uis-with-tailwind-css',
+    featured: false
   },
   {
     id: '3',
@@ -59,11 +55,15 @@ const mockPosts: BlogPost[] = [
     excerpt: 'Explore advanced JavaScript patterns and techniques for better code organization.',
     content: 'Full content here...',
     coverImage: 'https://images.unsplash.com/photo-1579468118864-1b9ea3c0db4a?w=300&h=200&fit=crop',
-    date: '2024-03-05',
+    publishedAt: new Date('2024-03-05'),
+    updatedAt: new Date('2024-03-05'),
+    readTime: '12 min read',
     status: 'draft',
     tags: ['JavaScript', 'Patterns', 'Advanced'],
     views: 0,
-    author: 'Joshua Dix'
+    author: 'Joshua Dix',
+    slug: 'advanced-javascript-patterns',
+    featured: false
   },
   {
     id: '4',
@@ -71,11 +71,15 @@ const mockPosts: BlogPost[] = [
     excerpt: 'Compare different state management solutions for React applications.',
     content: 'Full content here...',
     coverImage: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=300&h=200&fit=crop',
-    date: '2024-02-28',
+    publishedAt: new Date('2024-02-28'),
+    updatedAt: new Date('2024-02-28'),
+    readTime: '10 min read',
     status: 'published',
     tags: ['React', 'State Management', 'Redux'],
     views: 756,
-    author: 'Joshua Dix'
+    author: 'Joshua Dix',
+    slug: 'state-management-in-react-applications',
+    featured: true
   },
   {
     id: '5',
@@ -83,11 +87,15 @@ const mockPosts: BlogPost[] = [
     excerpt: 'Learn how to write comprehensive E2E tests for React applications.',
     content: 'Full content here...',
     coverImage: 'https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=300&h=200&fit=crop',
-    date: '2024-02-20',
+    publishedAt: new Date('2024-02-20'),
+    updatedAt: new Date('2024-02-20'),
+    readTime: '15 min read',
     status: 'draft',
     tags: ['Testing', 'Playwright', 'React'],
     views: 0,
-    author: 'Joshua Dix'
+    author: 'Joshua Dix',
+    slug: 'testing-react-components-with-playwright',
+    featured: false
   }
 ];
 

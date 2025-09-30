@@ -4,6 +4,21 @@ import { ReactNode } from 'react';
 import { BlogStoreProvider, useBlogStore, BlogTag } from '@/utils/BlogStore';
 import { BlogPost } from '@/types';
 
+// Helper function to create test post data
+const createTestPost = (overrides: Partial<Omit<BlogPost, 'id' | 'publishedAt' | 'updatedAt' | 'views'>> = {}) => ({
+  title: 'Test Post',
+  content: 'Test content',
+  excerpt: 'Test excerpt',
+  coverImage: 'test-image.jpg',
+  status: 'published' as const,
+  author: 'Test Author',
+  tags: [],
+  slug: 'test-slug',
+  readTime: '1 min read',
+  featured: false,
+  ...overrides
+});
+
 // Mock localStorage
 const localStorageMock = {
   getItem: vi.fn(),
@@ -61,12 +76,15 @@ describe('BlogStore', () => {
           content: 'Test content',
           excerpt: 'Test excerpt',
           coverImage: 'test-image.jpg',
-          date: 'January 1, 2023',
+          publishedAt: new Date('2023-01-01'),
+          updatedAt: new Date('2023-01-01'),
           readTime: '2 min read',
           status: 'published',
+          author: 'Test Author',
           tags: ['Test'],
           views: 10,
-          url: '/blog/test-post'
+          slug: 'test-post',
+          featured: false
         }
       ];
 
@@ -174,12 +192,15 @@ describe('BlogStore', () => {
           content: 'Content',
           excerpt: 'Excerpt',
           coverImage: 'image.jpg',
-          date: 'Jan 1, 2023',
+          publishedAt: new Date('2023-01-01'),
+          updatedAt: new Date('2023-01-01'),
           readTime: '5 min read',
           status: 'published',
+          author: 'Test Author',
           tags: ['Test'],
           views: 100,
-          url: '/blog/published-post'
+          slug: 'published-post',
+          featured: false
         },
         {
           id: '2',
@@ -187,12 +208,15 @@ describe('BlogStore', () => {
           content: 'Content',
           excerpt: 'Excerpt',
           coverImage: 'image.jpg',
-          date: 'Jan 2, 2023',
+          publishedAt: new Date('2023-01-02'),
+          updatedAt: new Date('2023-01-02'),
           readTime: '3 min read',
           status: 'draft',
+          author: 'Test Author',
           tags: ['Test'],
           views: 0,
-          url: '/blog/draft-post'
+          slug: 'draft-post',
+          featured: false
         }
       ];
 
@@ -252,9 +276,11 @@ describe('BlogStore', () => {
         excerpt: 'Test excerpt',
         coverImage: 'test-image.jpg',
         status: 'published' as const,
+        author: 'Test Author',
         tags: ['Test', 'New'],
-        readTime: '1 min read',
-        url: '/blog/new-test-post'
+        slug: 'original-slug', // Will be overridden by auto-generated slug
+        readTime: 'original-time', // Will be overridden by auto-calculated time
+        featured: false
       };
 
       let newPost: BlogPost;
@@ -264,10 +290,11 @@ describe('BlogStore', () => {
 
       expect(newPost!).toHaveProperty('id');
       expect(newPost!.title).toBe('New Test Post');
-      expect(newPost!.date).toBe('September 27, 2023'); // Mocked date (system timezone offset)
+      expect(newPost!.publishedAt).toBeInstanceOf(Date);
+      expect(newPost!.updatedAt).toBeInstanceOf(Date);
       expect(newPost!.views).toBe(0);
-      expect(newPost!.url).toBe('/blog/new-test-post');
-      expect(newPost!.readTime).toBe('1 min read'); // Calculated from content
+      expect(newPost!.slug).toBe('new-test-post'); // Auto-generated from title
+      expect(newPost!.readTime).toBe('1 min read'); // Auto-calculated from content
       expect(result.current.posts).toHaveLength(3); // 2 sample + 1 new
     });
 
@@ -284,9 +311,11 @@ describe('BlogStore', () => {
         excerpt: 'Excerpt',
         coverImage: 'image.jpg',
         status: 'draft' as const,
+        author: 'Test Author',
         tags: [],
+        slug: 'original-slug',
         readTime: '1 min read',
-        url: '/blog/test'
+        featured: false
       };
 
       let newPost: BlogPost;
@@ -294,7 +323,7 @@ describe('BlogStore', () => {
         newPost = result.current.addPost(postData);
       });
 
-      expect(newPost!.url).toBe('/blog/my-new-post-with-special-characters-spaces');
+      expect(newPost!.slug).toBe('my-new-post-with-special-characters-spaces');
     });
 
     it('should calculate read time based on content length', () => {
@@ -314,9 +343,11 @@ describe('BlogStore', () => {
         excerpt: 'Excerpt',
         coverImage: 'image.jpg',
         status: 'published' as const,
+        author: 'Test Author',
         tags: [],
+        slug: 'original-slug',
         readTime: '1 min read', // This should be overwritten
-        url: '/blog/test'
+        featured: false
       };
 
       let newPost: BlogPost;
@@ -337,16 +368,11 @@ describe('BlogStore', () => {
       const initialReactTag = result.current.tags.find(tag => tag.name === 'React');
       expect(initialReactTag?.count).toBe(1);
 
-      const postData = {
+      const postData = createTestPost({
         title: 'React Post',
         content: 'Content about React',
-        excerpt: 'Excerpt',
-        coverImage: 'image.jpg',
-        status: 'published' as const,
         tags: ['React', 'JavaScript'],
-        readTime: '1 min read',
-        url: '/blog/test'
-      };
+      });
 
       act(() => {
         result.current.addPost(postData);
@@ -368,16 +394,11 @@ describe('BlogStore', () => {
 
       const initialTagCount = result.current.tags.length;
 
-      const postData = {
+      const postData = createTestPost({
         title: 'Vue Post',
         content: 'Content about Vue',
-        excerpt: 'Excerpt',
-        coverImage: 'image.jpg',
-        status: 'published' as const,
         tags: ['Vue', 'NewFramework'],
-        readTime: '1 min read',
-        url: '/blog/test'
-      };
+      });
 
       act(() => {
         result.current.addPost(postData);
@@ -632,16 +653,10 @@ describe('BlogStore', () => {
         wrapper: TestWrapper,
       });
 
-      const postData = {
+      const postData = createTestPost({
         title: 'New Post',
         content: 'Content',
-        excerpt: 'Excerpt',
-        coverImage: 'image.jpg',
-        status: 'published' as const,
-        tags: [],
-        readTime: '1 min read',
-        url: '/blog/test'
-      };
+      });
 
       act(() => {
         result.current.addPost(postData);
@@ -680,30 +695,27 @@ describe('BlogStore', () => {
       });
 
       const testCases = [
-        { title: 'Hello World', expected: '/blog/hello-world' },
-        { title: 'React Tips & Tricks!', expected: '/blog/react-tips-tricks' },
-        { title: 'Advanced    JavaScript    Concepts', expected: '/blog/advanced-javascript-concepts' },
-        { title: 'TypeScript: The Ultimate Guide', expected: '/blog/typescript-the-ultimate-guide' }
+        { title: 'Hello World', expected: 'hello-world' },
+        { title: 'React Tips & Tricks!', expected: 'react-tips-tricks' },
+        { title: 'My First Post!!', expected: 'my-first-post' },
+        { title: 'React Hooks Tutorial', expected: 'react-hooks-tutorial' },
+        { title: 'JavaScript & TypeScript', expected: 'javascript-typescript' },
+        { title: 'Advanced    JavaScript    Concepts', expected: 'advanced-javascript-concepts' },
+        { title: 'TypeScript: The Ultimate Guide', expected: 'typescript-the-ultimate-guide' }
       ];
 
       testCases.forEach(({ title, expected }) => {
-        const postData = {
+        const postData = createTestPost({
           title,
           content: 'Content',
-          excerpt: 'Excerpt',
-          coverImage: 'image.jpg',
-          status: 'published' as const,
-          tags: [],
-          readTime: '1 min read',
-          url: '/blog/test'
-        };
+        });
 
         let newPost: BlogPost;
         act(() => {
           newPost = result.current.addPost(postData);
         });
 
-        expect(newPost!.url).toBe(expected);
+        expect(newPost!.slug).toBe(expected);
       });
     });
 
@@ -723,16 +735,10 @@ describe('BlogStore', () => {
 
       testCases.forEach(({ words, expected }, index) => {
         const content = Array(words).fill('word').join(' ');
-        const postData = {
+        const postData = createTestPost({
           title: `Test Post ${index}`,
           content,
-          excerpt: 'Excerpt',
-          coverImage: 'image.jpg',
-          status: 'published' as const,
-          tags: [],
-          readTime: '1 min read',
-          url: '/blog/test'
-        };
+        });
 
         let newPost: BlogPost;
         act(() => {

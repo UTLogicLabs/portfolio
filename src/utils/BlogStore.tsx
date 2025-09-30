@@ -19,7 +19,7 @@ interface BlogStoreContextType {
   posts: BlogPost[];
   tags: BlogTag[];
   stats: BlogStats;
-  addPost: (post: Omit<BlogPost, 'id' | 'date' | 'views'>) => BlogPost;
+  addPost: (post: Omit<BlogPost, 'id' | 'publishedAt' | 'updatedAt' | 'views'>) => BlogPost;
   updatePost: (post: BlogPost) => void;
   deletePost: (id: string) => void;
   getPost: (id: string) => BlogPost | undefined;
@@ -65,7 +65,12 @@ export const BlogStoreProvider = ({ children }: BlogStoreProviderProps) => {
     const storedTags = localStorage.getItem('blog_tags');
 
     if (storedPosts) {
-      setPosts(JSON.parse(storedPosts));
+      const parsedPosts = JSON.parse(storedPosts).map((post: any) => ({
+        ...post,
+        publishedAt: new Date(post.publishedAt),
+        updatedAt: new Date(post.updatedAt),
+      }));
+      setPosts(parsedPosts);
     } else {
       // Initialize with sample posts if none exist
       const samplePosts: BlogPost[] = [

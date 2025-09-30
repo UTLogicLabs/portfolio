@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useAdminAuth } from '../hooks/useAdminAuth';
-import { useBlogStore } from '../hooks/useBlogStore';
+import { useBlogStore } from '@/utils/BlogStore';
 // Using simple symbols instead of icons for now
 
 export function AdminDashboard() {
@@ -168,7 +168,7 @@ export function AdminDashboard() {
                           <span>{post.title}</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {post.date}
+                          {post.publishedAt.toLocaleDateString()}
                         </div>
                       </div>
                     ))}
@@ -221,7 +221,7 @@ export function AdminDashboard() {
                                 {post.status === 'published' ? 'Published' : 'Draft'}
                               </span>
                               <span className="text-xs text-muted-foreground">
-                                {post.date}
+                                {post.publishedAt.toLocaleDateString()}
                               </span>
                               <span className="text-xs text-muted-foreground">
                                 {post.views} views

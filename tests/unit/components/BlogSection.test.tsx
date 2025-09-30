@@ -1,39 +1,627 @@
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
-import { BlogSection } from '@/components/BlogSection';
+import { render, screen } from '@testing-library/react';import { render, screen } from '@testing-library/react';
 
-// Mock the Icon component
-vi.mock('@/components/ui', () => ({
-  Icon: ({ name, size, className }: { name: string; size: number; className?: string }) => (
-    <div data-testid={`icon-${name}`} data-size={size} className={className}>
-      {name}
-    </div>
-  ),
-}));
+import { describe, it, expect, vi } from 'vitest';import { describe, it, expect, vi } from 'vitest';
+
+import { BlogSection } from '@/components/BlogSection';import { BlogSection } from '@/components/BlogSection';
+
+import type { BlogPost } from '@/types';import type { BlogPost } from '@/types';
+
+
+
+// Mock the Icon component// Mock the Icon component
+
+vi.mock('@/components/ui', () => ({vi.mock('@/components/ui', () => ({
+
+  Icon: ({ name, size, className }: { name: string; size: number; className?: string }) => (  Icon: ({ name, size, className }: { name: string; size: number; className?: string }) => (
+
+    <div data-testid={`icon-${name}`} data-size={size} className={className}>    <div data-testid={`icon-${name}`} data-size={size} className={className}>
+
+      {name}      {name}
+
+    </div>    </div>
+
+  ),  ),
+
+}));}));
+
+
+
+// Mock react-router Link// Mock react-router Link
+
+vi.mock('react-router', () => ({vi.mock('react-router', () => ({
+
+  Link: ({ to, className, children }: { to: string; className?: string; children: React.ReactNode }) => (  Link: ({ to, className, children }: { to: string; className?: string; children: React.ReactNode }) => (
+
+    <a href={to} className={className}>    <a href={to} className={className}>
+
+      {children}      {children}
+
+    </a>    </a>
+
+  ),  ),
+
+}));}));
+
+
+
+// Create test blog posts// Create test blog posts
+
+const mockBlogPosts: BlogPost[] = [const mockBlogPosts: BlogPost[] = [
+
+  {  {
+
+    id: '1',    id: '1',
+
+    title: 'Building Scalable React Applications: Best Practices',    title: 'Building Scalable React Applications: Best Practices',
+
+    excerpt: 'Learn how to structure your React applications for scalability and maintainability.',    excerpt: 'Learn how to structure your React applications for scalability and maintainability.',
+
+    content: 'Full content here...',    content: 'Full content here...',
+
+    slug: 'building-scalable-react-applications',    slug: 'building-scalable-react-applications',
+
+    tags: ['React', 'JavaScript', 'Frontend'],    tags: ['React', 'JavaScript', 'Frontend'],
+
+    publishedAt: new Date('2023-06-15'),    publishedAt: new Date('2023-06-15'),
+
+    updatedAt: new Date('2023-06-15'),    updatedAt: new Date('2023-06-15'),
+
+    featured: true,    featured: true,
+
+    coverImage: '/blog/react-best-practices.jpg',    coverImage: '/blog/react-best-practices.jpg',
+
+    author: 'Joshua Dix',    author: 'Joshua Dix',
+
+    readTime: '8 min read',    readTime: '8 min read',
+
+    status: 'published',    status: 'published',
+
+    views: 1250    views: 1250
+
+  },  },
+
+  {  {
+
+    id: '2',    id: '2',
+
+    title: 'TypeScript Tips for JavaScript Developers',    title: 'TypeScript Tips for JavaScript Developers',
+
+    excerpt: 'Make the transition from JavaScript to TypeScript smoother with these practical tips.',    excerpt: 'Make the transition from JavaScript to TypeScript smoother with these practical tips.',
+
+    content: 'Full content here...',    content: 'Full content here...',
+
+    slug: 'typescript-tips-for-javascript-developers',    slug: 'typescript-tips-for-javascript-developers',
+
+    tags: ['TypeScript', 'JavaScript', 'Development'],    tags: ['TypeScript', 'JavaScript', 'Development'],
+
+    publishedAt: new Date('2023-05-22'),    publishedAt: new Date('2023-05-22'),
+
+    updatedAt: new Date('2023-05-22'),    updatedAt: new Date('2023-05-22'),
+
+    featured: true,    featured: true,
+
+    coverImage: '/blog/typescript-tips.jpg',    coverImage: '/blog/typescript-tips.jpg',
+
+    author: 'Joshua Dix',    author: 'Joshua Dix',
+
+    readTime: '6 min read',    readTime: '6 min read',
+
+    status: 'published',    status: 'published',
+
+    views: 890    views: 890
+
+  },  },
+
+  {  {
+
+    id: '3',    id: '3',
+
+    title: 'Optimizing Web Performance: The Ultimate Guide',    title: 'Optimizing Web Performance: The Ultimate Guide',
+
+    excerpt: 'Comprehensive guide to improving your web application performance.',    excerpt: 'Comprehensive guide to improving your web application performance.',
+
+    content: 'Full content here...',    content: 'Full content here...',
+
+    slug: 'optimizing-web-performance-guide',    slug: 'optimizing-web-performance-guide',
+
+    tags: ['Performance', 'Web Development', 'Optimization'],    tags: ['Performance', 'Web Development', 'Optimization'],
+
+    publishedAt: new Date('2023-04-10'),    publishedAt: new Date('2023-04-10'),
+
+    updatedAt: new Date('2023-04-10'),    updatedAt: new Date('2023-04-10'),
+
+    featured: true,    featured: true,
+
+    coverImage: '/blog/web-performance.jpg',    coverImage: '/blog/web-performance.jpg',
+
+    author: 'Joshua Dix',    author: 'Joshua Dix',
+
+    readTime: '12 min read',    readTime: '12 min read',
+
+    status: 'published',    status: 'published',
+
+    views: 1580    views: 1580
+
+  }  }
+
+];];
+
+
+
+describe('BlogSection', () => {describe('BlogSection', () => {
+
+  describe('Component Structure', () => {  describe('Component Structure', () => {
+
+    it('should render the blog section with correct ID and classes', () => {    it('should render the blog section with correct ID and classes', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const section = document.querySelector('#projects');      const section = document.querySelector('#projects');
+
+      expect(section).toBeInTheDocument();      expect(section).toBeInTheDocument();
+
+      expect(section).toHaveClass('py-20', 'px-4', 'sm:px-6', 'lg:px-8');      expect(section).toHaveClass('py-20', 'px-4', 'sm:px-6', 'lg:px-8');
+
+    });    });
+
+
+
+    it('should render the container with proper styling', () => {    it('should render the container with proper styling', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const container = document.querySelector('.max-w-6xl');      const container = document.querySelector('.max-w-6xl');
+
+      expect(container).toBeInTheDocument();      expect(container).toBeInTheDocument();
+
+      expect(container).toHaveClass('mx-auto');      expect(container).toHaveClass('mx-auto');
+
+    });    });
+
+
+
+    it('should render the main heading', () => {    it('should render the main heading', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const heading = screen.getByRole('heading', { level: 3 });      const heading = screen.getByRole('heading', { level: 3 });
+
+      expect(heading).toHaveTextContent('Featured Projects');      expect(heading).toHaveTextContent('Featured Projects');
+
+      expect(heading).toHaveClass('text-3xl', 'font-bold', 'text-center', 'mb-12');      expect(heading).toHaveClass('text-3xl', 'font-bold', 'text-center', 'mb-12');
+
+    });    });
+
+  });  });
+
+
+
+  describe('Blog Posts Grid', () => {  describe('Blog Posts Grid', () => {
+
+    it('should render the posts grid with correct styling', () => {    it('should render the posts grid with correct styling', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const grid = document.querySelector('.grid');      const grid = document.querySelector('.grid');
+
+      expect(grid).toBeInTheDocument();      expect(grid).toBeInTheDocument();
+
+      expect(grid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'gap-8');      expect(grid).toHaveClass('grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'gap-8');
+
+    });    });
+
+
+
+    it('should render exactly 3 blog post cards', () => {    it('should render exactly 3 blog post cards', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const postCards = document.querySelectorAll('.bg-white');      const postCards = document.querySelectorAll('.bg-white');
+
+      expect(postCards).toHaveLength(3);      expect(postCards).toHaveLength(3);
+
+    });    });
+
+
+
+    it('should render each post card with proper structure', () => {    it('should render each post card with proper structure', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const postCards = document.querySelectorAll('.bg-white');      const postCards = document.querySelectorAll('.bg-white');
+
+            
+
+      postCards.forEach(card => {      postCards.forEach(card => {
+
+        expect(card).toHaveClass('dark:bg-gray-800', 'rounded-lg', 'shadow-lg', 'overflow-hidden');        expect(card).toHaveClass('dark:bg-gray-800', 'rounded-lg', 'shadow-lg', 'overflow-hidden');
+
+                
+
+        const contentContainer = card.querySelector('.p-6');        const contentContainer = card.querySelector('.p-6');
+
+        expect(contentContainer).toBeInTheDocument();        expect(contentContainer).toBeInTheDocument();
+
+      });      });
+
+    });    });
+
+  });  });
+
+
+
+  describe('Blog Post Content', () => {  describe('Blog Post Content', () => {
+
+    it('should render the first blog post with correct content', () => {    it('should render the first blog post with correct content', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const firstPostTitle = screen.getByText('Building Scalable React Applications: Best Practices');      const firstPostTitle = screen.getByText('Building Scalable React Applications: Best Practices');
+
+      expect(firstPostTitle).toBeInTheDocument();      expect(firstPostTitle).toBeInTheDocument();
+
+      expect(firstPostTitle).toHaveClass('text-xl', 'font-semibold', 'mb-3');      expect(firstPostTitle).toHaveClass('text-xl', 'font-semibold', 'mb-3');
+
+            
+
+      const firstPostExcerpt = screen.getByText(/Learn how to structure your React applications for scalability/);      const firstPostExcerpt = screen.getByText(/Learn how to structure your React applications for scalability/);
+
+      expect(firstPostExcerpt).toBeInTheDocument();      expect(firstPostExcerpt).toBeInTheDocument();
+
+    });    });
+
+
+
+    it('should render the second blog post with correct content', () => {    it('should render the second blog post with correct content', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const secondPostTitle = screen.getByText('TypeScript Tips for JavaScript Developers');      const secondPostTitle = screen.getByText('TypeScript Tips for JavaScript Developers');
+
+      expect(secondPostTitle).toBeInTheDocument();      expect(secondPostTitle).toBeInTheDocument();
+
+            
+
+      const secondPostExcerpt = screen.getByText(/Make the transition from JavaScript to TypeScript smoother/);      const secondPostExcerpt = screen.getByText(/Make the transition from JavaScript to TypeScript smoother/);
+
+      expect(secondPostExcerpt).toBeInTheDocument();      expect(secondPostExcerpt).toBeInTheDocument();
+
+    });    });
+
+
+
+    it('should render the third blog post with correct content', () => {    it('should render the third blog post with correct content', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const thirdPostTitle = screen.getByText('Optimizing Web Performance: The Ultimate Guide');      const thirdPostTitle = screen.getByText('Optimizing Web Performance: The Ultimate Guide');
+
+      expect(thirdPostTitle).toBeInTheDocument();      expect(thirdPostTitle).toBeInTheDocument();
+
+            
+
+      const thirdPostExcerpt = screen.getByText(/Comprehensive guide to improving your web application performance/);      const thirdPostExcerpt = screen.getByText(/Comprehensive guide to improving your web application performance/);
+
+      expect(thirdPostExcerpt).toBeInTheDocument();      expect(thirdPostExcerpt).toBeInTheDocument();
+
+    });    });
+
+
+
+    it('should render all blog post headings as h4 elements', () => {    it('should render all blog post headings as h4 elements', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const headings = screen.getAllByRole('heading', { level: 4 });      const headings = screen.getAllByRole('heading', { level: 4 });
+
+      expect(headings).toHaveLength(3);      expect(headings).toHaveLength(3);
+
+    });    });
+
+  });  });
+
+
+
+  describe('Blog Post Tags', () => {  describe('Blog Post Tags', () => {
+
+    it('should render tags for each post', () => {    it('should render tags for each post', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      expect(screen.getByText('React')).toBeInTheDocument();      expect(screen.getByText('React')).toBeInTheDocument();
+
+      expect(screen.getByText('JavaScript')).toBeInTheDocument();      expect(screen.getByText('JavaScript')).toBeInTheDocument();
+
+      expect(screen.getByText('Frontend')).toBeInTheDocument();      expect(screen.getByText('Frontend')).toBeInTheDocument();
+
+      expect(screen.getByText('TypeScript')).toBeInTheDocument();      expect(screen.getByText('TypeScript')).toBeInTheDocument();
+
+      expect(screen.getByText('Performance')).toBeInTheDocument();      expect(screen.getByText('Performance')).toBeInTheDocument();
+
+    });    });
+
+
+
+    it('should render tags with proper styling', () => {    it('should render tags with proper styling', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const reactTag = screen.getByText('React');      const reactTag = screen.getByText('React');
+
+      expect(reactTag).toHaveClass('px-3', 'py-1', 'text-xs', 'rounded-full');      expect(reactTag).toHaveClass('px-3', 'py-1', 'text-xs', 'rounded-full');
+
+    });    });
+
+  });  });
+
+
+
+  describe('Read More Links', () => {  describe('Read More Links', () => {
+
+    it('should render read more links with correct href attributes', () => {    it('should render read more links with correct href attributes', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const readMoreLinks = screen.getAllByText('Read More');      const readMoreLinks = screen.getAllByText('Read More');
+
+      expect(readMoreLinks).toHaveLength(3);      expect(readMoreLinks).toHaveLength(3);
+
+            
+
+      const firstLink = readMoreLinks[0].closest('a');      const firstLink = readMoreLinks[0].closest('a');
+
+      expect(firstLink).toHaveAttribute('href', 'blog/building-scalable-react-applications');      expect(firstLink).toHaveAttribute('href', 'blog/building-scalable-react-applications');
+
+    });    });
+
+
+
+    it('should render read more links with correct styling', () => {    it('should render read more links with correct styling', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const readMoreLinks = screen.getAllByText('Read More');      const readMoreLinks = screen.getAllByText('Read More');
+
+      readMoreLinks.forEach(link => {      readMoreLinks.forEach(link => {
+
+        expect(link.closest('a')).toHaveClass('mt-4', 'inline-flex', 'items-center', 'text-sm', 'font-medium', 'text-primary');        expect(link.closest('a')).toHaveClass('mt-4', 'inline-flex', 'items-center', 'text-sm', 'font-medium', 'text-primary');
+
+      });      });
+
+    });    });
+
+
+
+    it('should render arrow icons in read more links', () => {    it('should render arrow icons in read more links', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const arrowIcons = screen.getAllByTestId('icon-arrow-right');      const arrowIcons = screen.getAllByTestId('icon-arrow-right');
+
+      expect(arrowIcons).toHaveLength(3);      expect(arrowIcons).toHaveLength(3);
+
+            
+
+      arrowIcons.forEach(icon => {      arrowIcons.forEach(icon => {
+
+        expect(icon).toHaveAttribute('data-size', '14');        expect(icon).toHaveAttribute('data-size', '14');
+
+        expect(icon).toHaveClass('ml-1');        expect(icon).toHaveClass('ml-1');
+
+      });      });
+
+    });    });
+
+  });  });
+
+
+
+  describe('View All Posts Button', () => {  describe('View All Posts Button', () => {
+
+    it('should render the view all posts button with correct href', () => {    it('should render the view all posts button with correct href', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const viewAllButton = screen.getByText('View All Posts');      const viewAllButton = screen.getByText('View All Posts');
+
+      expect(viewAllButton.closest('a')).toHaveAttribute('href', '/blog');      expect(viewAllButton.closest('a')).toHaveAttribute('href', '/blog');
+
+    });    });
+
+
+
+    it('should render the view all posts button with correct styling', () => {    it('should render the view all posts button with correct styling', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const viewAllButton = screen.getByText('View All Posts');      const viewAllButton = screen.getByText('View All Posts');
+
+      const buttonElement = viewAllButton.closest('a');      const buttonElement = viewAllButton.closest('a');
+
+      expect(buttonElement).toHaveClass(      expect(buttonElement).toHaveClass(
+
+        'inline-flex',        'inline-flex',
+
+        'h-10',        'h-10',
+
+        'items-center',        'items-center',
+
+        'justify-center',        'justify-center',
+
+        'rounded-md',        'rounded-md',
+
+        'bg-primary',        'bg-primary',
+
+        'px-8',        'px-8',
+
+        'text-sm',        'text-sm',
+
+        'font-medium',        'font-medium',
+
+        'text-primary-foreground'        'text-primary-foreground'
+
+      );      );
+
+    });    });
+
+
+
+    it('should render the view all posts button in centered container', () => {    it('should render the view all posts button in centered container', () => {
+
+      render(<BlogSection blogPosts={mockBlogPosts} />);      render(<BlogSection blogPosts={mockBlogPosts} />);
+
+            
+
+      const buttonContainer = document.querySelector('.mt-12.flex.justify-center');      const buttonContainer = document.querySelector('.mt-12.flex.justify-center');
+
+      expect(buttonContainer).toBeInTheDocument();      expect(buttonContainer).toBeInTheDocument();
+
+            
+
+      const viewAllButton = screen.getByText('View All Posts');      const viewAllButton = screen.getByText('View All Posts');
+
+      expect(buttonContainer).toContainElement(viewAllButton.closest('a'));      expect(buttonContainer).toContainElement(viewAllButton.closest('a'));
+
+    });    });
+
+  });  });
+
+
+
+  describe('Empty State', () => {  describe('Empty State', () => {
+
+    it('should handle empty blog posts array', () => {    it('should handle empty blog posts array', () => {
+
+      render(<BlogSection blogPosts={[]} />);      render(<BlogSection blogPosts={[]} />);
+
+            
+
+      const heading = screen.getByText('Featured Projects');      const heading = screen.getByText('Featured Projects');
+
+      expect(heading).toBeInTheDocument();      expect(heading).toBeInTheDocument();
+
+            
+
+      const postCards = document.querySelectorAll('.bg-white');      const postCards = document.querySelectorAll('.bg-white');
+
+      expect(postCards).toHaveLength(0);      expect(postCards).toHaveLength(0);
+
+    });    });
+
+  });  });
+
+});});
+
+// Create test blog posts
+const mockBlogPosts: BlogPost[] = [
+  {
+    id: '1',
+    title: 'Building Scalable React Applications: Best Practices',
+    excerpt: 'Learn how to structure your React applications for scalability and maintainability.',
+    content: 'Full content here...',
+    slug: 'building-scalable-react-applications',
+    tags: ['React', 'JavaScript', 'Frontend'],
+    publishedAt: new Date('2023-06-15'),
+    updatedAt: new Date('2023-06-15'),
+    featured: true,
+    coverImage: '/blog/react-best-practices.jpg',
+    author: 'Joshua Dix',
+    readTime: '8 min read',
+    status: 'published',
+    views: 1250
+  },
+  {
+    id: '2',
+    title: 'TypeScript Tips for JavaScript Developers',
+    excerpt: 'Make the transition from JavaScript to TypeScript smoother with these practical tips.',
+    content: 'Full content here...',
+    slug: 'typescript-tips-for-javascript-developers',
+    tags: ['TypeScript', 'JavaScript', 'Development'],
+    publishedAt: new Date('2023-05-22'),
+    updatedAt: new Date('2023-05-22'),
+    featured: true,
+    coverImage: '/blog/typescript-tips.jpg',
+    author: 'Joshua Dix',
+    readTime: '6 min read',
+    status: 'published',
+    views: 890
+  },
+  {
+    id: '3',
+    title: 'Optimizing Web Performance: The Ultimate Guide',
+    excerpt: 'Comprehensive guide to improving your web application performance.',
+    content: 'Full content here...',
+    slug: 'optimizing-web-performance-guide',
+    tags: ['Performance', 'Web Development', 'Optimization'],
+    publishedAt: new Date('2023-04-10'),
+    updatedAt: new Date('2023-04-10'),
+    featured: true,
+    coverImage: '/blog/web-performance.jpg',
+    author: 'Joshua Dix',
+    readTime: '12 min read',
+    status: 'published',
+    views: 1580
+  }
+];
 
 describe('BlogSection', () => {
   describe('Component Structure', () => {
     it('should render the blog section with correct ID and classes', () => {
-      render(<BlogSection />);
+      render(<BlogSection blogPosts={mockBlogPosts} />);
       
-      const section = document.querySelector('#blog');
+      const section = document.querySelector('#projects');
       expect(section).toBeInTheDocument();
-      expect(section).toHaveClass('w-full', 'py-12', 'md:py-24', 'bg-accent');
+      expect(section).toHaveClass('py-20', 'px-4', 'sm:px-6', 'lg:px-8');
     });
 
     it('should render the container with proper styling', () => {
-      render(<BlogSection />);
+      render(<BlogSection blogPosts={mockBlogPosts} />);
       
-      const container = document.querySelector('.container');
+      const container = document.querySelector('.max-w-6xl');
       expect(container).toBeInTheDocument();
-      expect(container).toHaveClass('px-4', 'md:px-6');
+      expect(container).toHaveClass('mx-auto');
     });
 
     it('should render the header section with proper alignment', () => {
-      render(<BlogSection />);
+      render(<BlogSection blogPosts={mockBlogPosts} />);
       
-      const headerDiv = document.querySelector('.flex.flex-col.items-center.justify-center.space-y-4.text-center');
-      expect(headerDiv).toBeInTheDocument();
+      const heading = screen.getByRole('heading', { level: 3 });
+      expect(heading).toHaveTextContent('Featured Projects');
+      expect(heading).toHaveClass('text-3xl', 'font-bold', 'text-center', 'mb-12');
     });
   });
 
