@@ -31,7 +31,7 @@ export function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
+      <header className="border-b border-border bg-background">
         <div className="container flex h-16 items-center justify-between">
           <div className="flex items-center gap-4">
             <Link 
@@ -41,7 +41,7 @@ export function AdminDashboard() {
               <span className="mr-1">←</span>
               Back to Website
             </Link>
-            <h1 className="text-lg font-bold">Admin Dashboard</h1>
+            <h1 className="text-lg font-bold text-foreground">Admin Dashboard</h1>
           </div>
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">
@@ -64,12 +64,12 @@ export function AdminDashboard() {
           <div className="md:col-span-1">
             <div className="space-y-4">
               <div className="space-y-2">
-                <h2 className="text-xl font-bold">Dashboard</h2>
+                <h2 className="text-xl font-bold text-foreground">Dashboard</h2>
                 <nav className="flex flex-col space-y-1">
                   <button 
                     onClick={() => setActiveTab('stats')}
-                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-                      activeTab === 'stats' ? 'bg-accent' : 'hover:bg-accent/50'
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground ${
+                      activeTab === 'stats' ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
                     }`}
                   >
                     <span>📊</span>
@@ -77,8 +77,8 @@ export function AdminDashboard() {
                   </button>
                   <button 
                     onClick={() => setActiveTab('posts')}
-                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-                      activeTab === 'posts' ? 'bg-accent' : 'hover:bg-accent/50'
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground ${
+                      activeTab === 'posts' ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
                     }`}
                   >
                     <span>📝</span>
@@ -86,8 +86,8 @@ export function AdminDashboard() {
                   </button>
                   <button 
                     onClick={() => setActiveTab('tags')}
-                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${
-                      activeTab === 'tags' ? 'bg-accent' : 'hover:bg-accent/50'
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm text-foreground ${
+                      activeTab === 'tags' ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
                     }`}
                   >
                     <span>🏷️</span>
@@ -112,7 +112,7 @@ export function AdminDashboard() {
             {/* Stats Tab */}
             {activeTab === 'stats' && (
               <div className="space-y-6">
-                <h2 className="text-2xl font-bold">Blog Statistics</h2>
+                <h2 className="text-2xl font-bold text-foreground">Blog Statistics</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm">
                     <div className="text-sm font-medium text-muted-foreground">
@@ -141,12 +141,12 @@ export function AdminDashboard() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Popular Tags</h3>
+                  <h3 className="text-lg font-medium text-foreground">Popular Tags</h3>
                   <div className="flex flex-wrap gap-2">
                     {stats.popularTags.map(tag => (
-                      <div key={tag.id} className="flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm">
+                      <div key={tag.id} className="flex items-center gap-2 rounded-full bg-accent px-3 py-1 text-sm text-accent-foreground">
                         {tag.name}
-                        <span className="inline-flex items-center justify-center rounded-full bg-muted w-5 h-5 text-xs">
+                        <span className="inline-flex items-center justify-center rounded-full bg-muted w-5 h-5 text-xs text-muted-foreground">
                           {tag.count}
                         </span>
                       </div>
@@ -155,7 +155,7 @@ export function AdminDashboard() {
                 </div>
 
                 <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Recent Posts</h3>
+                  <h3 className="text-lg font-medium text-foreground">Recent Posts</h3>
                   <div className="space-y-2">
                     {posts.slice(0, 5).map(post => (
                       <div key={post.id} className="flex items-center justify-between p-3 rounded-md bg-accent/50">
@@ -165,7 +165,7 @@ export function AdminDashboard() {
                           ) : (
                             <span className="text-amber-500">🔒</span>
                           )}
-                          <span>{post.title}</span>
+                          <span className="text-foreground">{post.title}</span>
                         </div>
                         <div className="text-sm text-muted-foreground">
                           {post.publishedAt.toLocaleDateString()}
@@ -181,7 +181,7 @@ export function AdminDashboard() {
             {activeTab === 'posts' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold">Posts</h2>
+                  <h2 className="text-2xl font-bold text-foreground">Posts</h2>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">🔍</span>
                     <input 
@@ -189,7 +189,7 @@ export function AdminDashboard() {
                       placeholder="Search posts..." 
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 rounded-md border border-input bg-transparent text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="pl-10 pr-4 py-2 rounded-md border border-input bg-background text-foreground text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring placeholder:text-muted-foreground"
                     />
                   </div>
                 </div>
@@ -211,12 +211,12 @@ export function AdminDashboard() {
                             />
                           </div>
                           <div>
-                            <div className="font-medium">{post.title}</div>
+                            <div className="font-medium text-foreground">{post.title}</div>
                             <div className="flex items-center gap-2 mt-1">
                               <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                                 post.status === 'published' 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-amber-100 text-amber-800'
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400' 
+                                  : 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400'
                               }`}>
                                 {post.status === 'published' ? 'Published' : 'Draft'}
                               </span>
@@ -229,7 +229,7 @@ export function AdminDashboard() {
                             </div>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {post.tags.map(tag => (
-                                <span key={tag} className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-xs">
+                                <span key={tag} className="inline-flex items-center rounded-full bg-accent px-2 py-0.5 text-xs text-accent-foreground">
                                   {tag}
                                 </span>
                               ))}
@@ -239,14 +239,14 @@ export function AdminDashboard() {
                         <div className="flex items-center gap-2">
                           <button 
                             onClick={() => handleEditPost(post.id)}
-                            className="p-2 rounded-md hover:bg-accent"
+                            className="p-2 rounded-md hover:bg-accent text-foreground"
                           >
                             <span>✏️</span>
                             <span className="sr-only">Edit</span>
                           </button>
                           <button 
                             onClick={() => deletePost(post.id)}
-                            className="p-2 rounded-md hover:bg-accent text-red-500 hover:text-red-600"
+                            className="p-2 rounded-md hover:bg-accent text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-500"
                           >
                             <span>🗑️</span>
                             <span className="sr-only">Delete</span>
@@ -262,12 +262,12 @@ export function AdminDashboard() {
             {/* Tags Tab */}
             {activeTab === 'tags' && (
               <div className="space-y-6">
-                <h2 className="text-2xl font-bold">Tags</h2>
+                <h2 className="text-2xl font-bold text-foreground">Tags</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {tags.map(tag => (
                     <div key={tag.id} className="flex items-center justify-between p-3 rounded-md border bg-card text-card-foreground shadow-sm">
-                      <div className="font-medium">{tag.name}</div>
-                      <div className="inline-flex items-center justify-center rounded-full bg-accent px-2 text-sm">
+                      <div className="font-medium text-foreground">{tag.name}</div>
+                      <div className="inline-flex items-center justify-center rounded-full bg-accent px-2 text-sm text-accent-foreground">
                         {tag.count}
                       </div>
                     </div>

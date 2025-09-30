@@ -1,65 +1,29 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useLoaderData } from 'react-router';
 import { Icon } from '@/components/ui';
-import React from 'react';
-import { Header } from '@/components/layout/Header';
-import { Footer } from '@/components/layout/Footer';
 import type { BlogPost } from '@/types';
 import { BlogSection } from '@/components/BlogSection';
 
+// Loader function for blog posts
+export async function homePageLoader(): Promise<{ blogPosts: BlogPost[] }> {
+  // For now, we'll return an empty array to show the "Coming Soon" card
+  // Later this can be connected to your blog store or API
+  try {
+    // You can replace this with actual data fetching logic
+    // For example: const posts = await fetchBlogPosts();
+    const blogPosts: BlogPost[] = [];
+    
+    return { blogPosts };
+  } catch (error) {
+    console.error('Failed to load blog posts:', error);
+    return { blogPosts: [] };
+  }
+}
 
-const blogPosts: BlogPost[] = [
-    {
-      id: '1',
-      title: 'Building Scalable React Applications: Best Practices',
-      content: '# Building Scalable React Applications\n\nThis is a sample markdown content...',
-      excerpt: 'Learn how to structure your React applications for scalability, maintainability, and performance. This guide covers component design, state management, and optimization techniques.',
-      coverImage: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-      publishedAt: new Date('2023-06-15'),
-      updatedAt: new Date('2023-06-15'),
-      readTime: '8 min read',
-      tags: ['React', 'Web Development', 'JavaScript'],
-      status: 'published',
-      author: 'Joshua Dix',
-      views: 243,
-      slug: 'building-scalable-react-applications',
-      featured: true
-    },
-    {
-      id: '2',
-      title: 'TypeScript Tips for JavaScript Developers',
-      excerpt: "Make the transition from JavaScript to TypeScript smoother with these practical tips and tricks. Discover how to leverage TypeScript's type system to write more robust code.",
-      coverImage: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-      publishedAt: new Date('2023-05-22'),
-      updatedAt: new Date('2023-05-22'),
-      readTime: '6 min read',
-      slug: 'typescript-tips-for-javascript-developers',
-      content: '',
-      author: 'Joshua Dix',
-      status: 'draft',
-      tags: ['TypeScript', 'JavaScript', 'Web Development'],
-      views: 0,
-      featured: false
-    },
-    {
-      id: '3',
-      title: 'Optimizing Web Performance: The Ultimate Guide',
-      excerpt: 'Explore techniques for improving website performance, from code splitting and lazy loading to image optimization and caching strategies. Learn how to deliver a faster user experience.',
-      coverImage: 'https://images.unsplash.com/photo-1504639725590-34d0984388bd?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80',
-      publishedAt: new Date('2023-04-10'),
-      updatedAt: new Date('2023-04-10'),
-      readTime: '10 min read',
-      slug: 'optimizing-web-performance',
-      content: '',
-      author: 'Joshua Dix',
-      status: 'published',
-      tags: ['Performance', 'Web Development'],
-      views: 0,
-      featured: false
-    }
-  ];
+
 
 export function HomePage() {
+  const { blogPosts } = useLoaderData() as { blogPosts: BlogPost[] };
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   const toggleTheme = () => {

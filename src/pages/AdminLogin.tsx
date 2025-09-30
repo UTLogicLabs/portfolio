@@ -79,7 +79,7 @@ export function AdminLogin() {
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="w-full max-w-md space-y-6">
           <div className="space-y-2 text-center">
-            <h1 className="text-3xl font-bold">Admin Login</h1>
+            <h1 className="text-3xl font-bold text-foreground">Admin Login</h1>
             <p className="text-muted-foreground">
               Enter your credentials to access the admin dashboard
             </p>
@@ -88,7 +88,7 @@ export function AdminLogin() {
           {error && (
             <div 
               role="alert"
-              className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md"
+              className="p-3 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded-md"
             >
               {error}
             </div>
@@ -98,7 +98,7 @@ export function AdminLogin() {
 
           <form className="space-y-4">
             <div className="space-y-2">
-              <label htmlFor="username" className="text-sm font-medium">
+              <label htmlFor="username" className="text-sm font-medium text-foreground">
                 Username
               </label>
               <div className="relative">
@@ -120,7 +120,7 @@ export function AdminLogin() {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
+              <label htmlFor="password" className="text-sm font-medium text-foreground">
                 Password
               </label>
               <div className="relative">
@@ -152,7 +152,7 @@ export function AdminLogin() {
           </form>
 
           <div className="text-center text-sm text-muted-foreground">
-            <p>Demo credentials:</p>
+            <p className="text-foreground font-medium mb-2">Demo credentials:</p>
             <p>Username: admin</p>
             <p>Password: password123</p>
           </div>
