@@ -14,10 +14,12 @@ interface AdminAuthContext {
   isLoading: boolean;
 }
 
-const AdminAuthContext = createContext<AdminAuthContext | null>(null);
+const AdminAuthContextInstance = createContext<AdminAuthContext | null>(null);
+
+export { AdminAuthContextInstance as AdminAuthContext };
 
 export function useAdminAuth() {
-  const context = useContext(AdminAuthContext);
+  const context = useContext(AdminAuthContextInstance);
   if (!context) {
     throw new Error('useAdminAuth must be used within an AdminAuthProvider');
   }
@@ -79,5 +81,3 @@ export function useAdminAuthProvider(): AdminAuthContext {
     isLoading
   };
 }
-
-export { AdminAuthContext };
