@@ -1,0 +1,9 @@
+name = "portfolio"
+compatibility_date = "2025-01-01"
+main = "workers/app.ts"
+pages_build_output_dir = "./build/client"
+
+[[d1_databases]]
+binding = "portfolio_db"
+database_name = "portfolio-db"
+database_id = "122d7ae4-5846-47fd-aec8-05176168f84f"
