@@ -17,7 +17,8 @@
     "db:generate": "prisma generate",
     "db:migrate:init": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script --output migration.sql && wrangler d1 execute portfolio-db --local --file=migration.sql && rm -f migration.sql",
     "db:migrate:local": "node scripts/migrate.js",
-    "db:migrate:remote": "node scripts/migrate.js --remote"
+    "db:migrate:remote": "node scripts/migrate.js --remote",
+    "prepare": "husky"
   },
   "repository": {
     "type": "git",
@@ -47,6 +48,8 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "^1.42.1",
     "@cloudflare/workers-types": "^4.20260621.1",
+    "@commitlint/cli": "^21.0.2",
+    "@commitlint/config-conventional": "^21.0.2",
     "@playwright/test": "^1.61.0",
     "@react-router/dev": "^7.18.0",
     "@tailwindcss/vite": "^4.3.1",
@@ -59,6 +62,7 @@
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
+    "husky": "^9.1.7",
     "jsdom": "^29.1.1",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.1",

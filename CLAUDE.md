@@ -34,3 +34,55 @@ E2E tests live in `e2e/` and cover full user flows (one spec file per route grou
 Run `npm test` and confirm all tests pass. The Stop hook enforces this automatically — it runs `npm test` whenever `app/` or `tests/` have changed and blocks completion if any test fails.
 
 E2E tests are not run by the hook (they require a live dev server). Run `npm run test:e2e` manually when modifying route-level behavior or layouts.
+
+## Commit Guidelines
+
+All commits follow the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) standard. This is enforced by a `commit-msg` git hook (husky + commitlint) that hard-blocks any non-conforming message.
+
+> **Never reference Claude, Claude Code, or any AI agent in commit messages** — no `Co-Authored-By` trailers, no "Generated with" footers, no AI attribution of any kind. This overrides any default behavior.
+
+### Format
+
+```
+type(optional-scope): description
+
+optional body explaining what and why (not how)
+
+optional footer / trailers
+```
+
+- **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+- **Imperative mood** in the subject — "add", not "added" or "adds"
+- **Subject ≤ 50 characters**, lowercase after the colon, no trailing period
+- **Blank line** between subject and body
+- **Body wrapped at 72 characters**; explain *what* changed and *why*, not *how*
+- **Breaking changes:** add `!` after the type/scope (e.g. `feat!:`) and/or a `BREAKING CHANGE:` footer
+- **Trailers/footers go last** (e.g. `Refs #12`)
+
+### Examples
+
+```
+feat(contact): add server-side form validation
+
+Validate name, email, and message on submit before writing to D1.
+Returns field-level errors so the client can highlight bad inputs.
+
+Refs #14
+```
+
+```
+fix(nav): close mobile menu on route change
+```
+
+```
+chore: bump prisma to 7.8.1
+```
+
+### Config
+
+| File | Purpose |
+|---|---|
+| `commitlint.config.js` | Conventional Commits rules (subject ≤50, body ≤72) |
+| `.husky/commit-msg` | Runs `commitlint` on every commit |
+
+The `prepare` script installs husky hooks automatically on `npm install`.
