@@ -28,8 +28,7 @@ export async function loader({ params }: { params: { slug: string } }) {
   return { frontmatter: resolved.frontmatter, slug: params.slug };
 }
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  const loaderData = data as Awaited<ReturnType<typeof loader>> | undefined;
+export const meta: MetaFunction<typeof loader> = ({ data: loaderData }) => {
   if (!loaderData) return [{ title: "Not Found" }];
   return [
     { title: `${loaderData.frontmatter.title} — Joshua Dix` },

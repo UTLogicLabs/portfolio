@@ -4,7 +4,7 @@ import About, { meta } from "~/routes/about";
 
 describe("About meta", () => {
   it("returns the page title", () => {
-    const result = meta({ data: undefined, params: {}, matches: [] } as unknown as Parameters<typeof meta>[0]);
+    const result = meta({ data: undefined as never, params: {}, matches: [] });
     expect(result).toContainEqual({ title: "About — Joshua Dix" });
   });
 });

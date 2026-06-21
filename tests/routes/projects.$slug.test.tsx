@@ -20,7 +20,7 @@ describe("ProjectDetail loader", () => {
 
 describe("ProjectDetail meta", () => {
   it("returns Not Found title when loaderData is undefined", () => {
-    const result = meta({ data: undefined, params: {}, matches: [] } as unknown as Parameters<typeof meta>[0]);
+    const result = meta({ data: undefined as never, params: {}, matches: [] });
     expect(result).toContainEqual({ title: "Not Found" });
   });
 
@@ -37,7 +37,7 @@ describe("ProjectDetail meta", () => {
       },
       params: {},
       matches: [],
-    } as unknown as Parameters<typeof meta>[0]);
+    });
     expect(result).toContainEqual({ title: "This Portfolio — Joshua Dix" });
     expect(result).toContainEqual({ name: "description", content: "Personal portfolio site." });
   });

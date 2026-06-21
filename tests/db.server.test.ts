@@ -4,14 +4,14 @@ vi.mock("@prisma/adapter-d1", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PrismaD1: vi.fn(function (this: any, db: unknown) { this._db = db; }),
 }));
-vi.mock("~/generated/prisma/client", () => ({
+vi.mock("@prisma/client", () => ({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   PrismaClient: vi.fn(function (this: any, opts: unknown) { this._opts = opts; }),
 }));
 
 import { getPrisma } from "~/db.server";
 import { PrismaD1 } from "@prisma/adapter-d1";
-import { PrismaClient } from "~/generated/prisma/client";
+import { PrismaClient } from "@prisma/client";
 
 describe("getPrisma", () => {
   beforeEach(() => { vi.clearAllMocks(); });

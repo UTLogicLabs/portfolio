@@ -5,7 +5,7 @@ import ProjectsIndex, { loader, meta } from "~/routes/projects._index";
 
 describe("ProjectsIndex meta", () => {
   it("returns the page title", () => {
-    const result = meta({ data: undefined, params: {}, matches: [] } as unknown as Parameters<typeof meta>[0]);
+    const result = meta({ data: undefined as never, params: {}, matches: [] });
     expect(result).toContainEqual({ title: "Projects — Joshua Dix" });
   });
 });

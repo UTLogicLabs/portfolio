@@ -3,7 +3,7 @@
   "compilerOptions": {
     "rootDirs": [".", "./.react-router/types"],
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["@cloudflare/workers-types"],
     "isolatedModules": true,
     "esModuleInterop": true,
     "jsx": "react-jsx",

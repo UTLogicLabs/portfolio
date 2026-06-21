@@ -1,5 +1,6 @@
 import { data, Form, useActionData, useNavigation } from "react-router";
-import type { ActionFunctionArgs, AppLoadContext, MetaFunction } from "react-router";
+import type { ActionFunctionArgs, MetaFunction } from "react-router";
+import type { AppLoadContext } from "@react-router/cloudflare";
 import { getPrisma } from "~/db.server";
 
 export const meta: MetaFunction = () => [

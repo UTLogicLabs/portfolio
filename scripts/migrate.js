@@ -10,7 +10,7 @@
  *   node scripts/migrate.js --remote # apply to remote D1
  */
 
-import { spawnSync } from "node:child_process";
+import { execSync, spawnSync } from "node:child_process";
 import { unlinkSync, existsSync } from "node:fs";
 
 const remote = process.argv.includes("--remote");
