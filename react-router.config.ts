@@ -3,8 +3,6 @@ import type { Config } from "@react-router/dev/config";
 export default {
   ssr: true,
   future: {
-    v3_fetcherPersist: true,
-    v3_relativeSplatPath: true,
-    v3_throwAbortReason: true,
+    unstable_viteEnvironmentApi: true,
   },
 } satisfies Config;

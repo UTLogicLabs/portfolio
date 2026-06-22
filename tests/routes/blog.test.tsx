@@ -24,7 +24,7 @@ describe("BlogLayout loader", () => {
 });
 
 describe("BlogLayout component", () => {
-  function makeStub(path: string) {
+  function makeStub(_path: string) {
     return createRoutesStub([{
       path: "/blog",
       Component: BlogLayout,

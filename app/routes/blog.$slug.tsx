@@ -29,7 +29,8 @@ export async function loader({ params }: { params: { slug: string } }) {
   };
 }
 
-export const meta: MetaFunction<typeof loader> = ({ data: loaderData }) => {
+export const meta: MetaFunction<typeof loader> = ({ data }) => {
+  const loaderData = data as Awaited<ReturnType<typeof loader>> | undefined;
   if (!loaderData) return [{ title: "Not Found" }];
   return [
     { title: `${loaderData.frontmatter.title} — Joshua Dix` },
@@ -39,10 +40,8 @@ export const meta: MetaFunction<typeof loader> = ({ data: loaderData }) => {
 
 export default function BlogPost({
   loaderData,
-  params,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>>;
-  params: { slug: string };
 }) {
   const { frontmatter, slug } = loaderData;
 

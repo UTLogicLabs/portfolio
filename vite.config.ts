@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    cloudflare(),
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
     mdx({ remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter] }),
     reactRouter(),
     tailwindcss(),
