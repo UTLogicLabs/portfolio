@@ -1,0 +1,28 @@
+---
+title: "This Portfolio"
+description: "Personal portfolio site built with React Router v7, Cloudflare Pages, and MDX."
+date: "2026-06-21"
+tech: ["React Router v7", "TypeScript", "Tailwind CSS", "Cloudflare Pages", "Prisma", "D1"]
+repo: "https://github.com/UTLogicLabs/portfolio"
+featured: true
+---
+
+A portfolio site that's fast, type-safe, and entirely under my control.
+
+## Motivation
+
+I wanted a site that:
+- Loads near-instantly on the edge (Cloudflare's global network)
+- Has a proper contact form backed by a real database
+- Keeps blog and project content in the repo, versioned alongside the code
+- Has tests at every level so I can ship changes confidently
+
+## Technical Highlights
+
+**React Router v7** in framework mode handles routing, SSR, and data loading. The `loader` / `action` pattern makes data fetching and form handling straightforward.
+
+**MDX** files serve as the content layer for this post and all blog entries. Frontmatter is exported as a typed module, so listing pages can `import.meta.glob` just the metadata without loading the full render tree.
+
+**Cloudflare D1** (via Prisma and `@prisma/adapter-d1`) stores contact form submissions. The per-request client pattern avoids holding stale D1 bindings across requests.
+
+**Tailwind CSS v4** styles the site using the new CSS-first config — all design tokens live in `app/app.css` under `@theme {}`.

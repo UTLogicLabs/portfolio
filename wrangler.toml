@@ -1,0 +1,15 @@
+name = "portfolio"
+main = "workers/app.ts"
+compatibility_date = "2025-10-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "build/client"
+
+[[d1_databases]]
+binding = "portfolio_db"
+database_name = "portfolio-db"
+database_id = "122d7ae4-5846-47fd-aec8-05176168f84f"
+
+[observability]
+enabled = true
