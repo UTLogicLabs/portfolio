@@ -46,6 +46,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Seed local D1 (contact form E2E writes to it)
+        run: npm run db:migrate:init
+
       - name: E2E tests
         run: npm run test:e2e
 

@@ -4,7 +4,7 @@
   "description": "Personal portfolio site — React Router v7 on Cloudflare Workers",
   "type": "module",
   "scripts": {
-    "dev": "react-router dev -- --host",
+    "dev": "vite dev",
     "build": "react-router build",
     "preview": "npm run build && vite preview",
     "deploy": "npm run build && wrangler deploy",
