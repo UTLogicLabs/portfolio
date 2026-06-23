@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   plugins: [
-    cloudflare(),
+    cloudflare({ configPath: "./wrangler.dev.toml" }),
     mdx({ remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter] }),
     reactRouter(),
     tailwindcss(),
