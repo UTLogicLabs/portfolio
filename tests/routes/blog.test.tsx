@@ -36,9 +36,18 @@ describe("BlogLayout component", () => {
     }]);
   }
 
-  it("renders Blog sidebar link to /blog", async () => {
+  it("does not render the sidebar on the /blog index page", async () => {
     const Stub = makeStub("/blog");
     render(<Stub initialEntries={["/blog"]} />);
+    // Allow async rendering to settle, then assert absence
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole("link", { name: "Blog" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Posts" })).toBeNull();
+  });
+
+  it("renders Blog sidebar link on a post page", async () => {
+    const Stub = makeStub("/blog/hello-world");
+    render(<Stub initialEntries={["/blog/hello-world"]} />);
     expect(await screen.findByRole("link", { name: "Blog" })).toHaveAttribute("href", "/blog");
   });
 
@@ -63,5 +72,14 @@ describe("BlogLayout component", () => {
     const link = await screen.findByRole("link", { name: "Hello, World" });
     expect(link.className).toContain("text-muted-foreground");
     expect(link.className).not.toContain("font-medium");
+  });
+
+  it("outer container uses max-w-4xl", async () => {
+    const Stub = makeStub("/blog");
+    const { container } = render(<Stub initialEntries={["/blog"]} />);
+    await new Promise((r) => setTimeout(r, 50));
+    const outer = container.firstChild as HTMLElement;
+    expect(outer.className).toContain("max-w-4xl");
+    expect(outer.className).not.toContain("max-w-6xl");
   });
 });

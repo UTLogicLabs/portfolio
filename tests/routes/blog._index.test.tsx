@@ -71,6 +71,18 @@ describe("BlogIndex component", () => {
     expect(await screen.findByText("The first post on this blog.")).toBeInTheDocument();
   });
 
+  it("outer container uses max-w-4xl", async () => {
+    const Stub = createRoutesStub([{
+      path: "/blog",
+      Component: BlogIndex,
+      loader: async () => ({ posts: [] }),
+    }]);
+    const { container } = render(<Stub initialEntries={["/blog"]} />);
+    await screen.findByRole("heading", { level: 1 });
+    const outer = container.querySelector("main")!;
+    expect(outer.className).toContain("max-w-4xl");
+  });
+
   it("renders a formatted date for each post", async () => {
     // Use noon UTC so toLocaleDateString stays on June 21 in all timezones ±12h
     const Stub = createRoutesStub([{

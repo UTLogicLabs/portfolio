@@ -32,18 +32,19 @@ export default function BlogLayout({
 }) {
   const { posts } = loaderData;
   const location = useLocation();
+  const isPost = /^\/blog\/.+/.test(location.pathname);
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-16 md:py-24">
-      <div className="flex flex-col md:flex-row gap-12">
-        <aside className="md:w-56 shrink-0">
-          <Link
-            to="/blog"
-            className="text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
-          >
-            Blog
-          </Link>
-          {/^\/blog\/.+/.test(location.pathname) && (
+    <div className="max-w-4xl mx-auto px-6 py-16 md:py-24">
+      {isPost ? (
+        <div className="flex flex-col md:flex-row gap-12">
+          <aside className="md:w-56 shrink-0">
+            <Link
+              to="/blog"
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider hover:text-foreground transition-colors"
+            >
+              Blog
+            </Link>
             <nav aria-label="Posts" className="mt-4 space-y-1">
               {posts.map((post) => {
                 const isActive = location.pathname === `/blog/${post.slug}`;
@@ -62,12 +63,14 @@ export default function BlogLayout({
                 );
               })}
             </nav>
-          )}
-        </aside>
-        <div className="flex-1 min-w-0">
-          <Outlet />
+          </aside>
+          <div className="flex-1 min-w-0">
+            <Outlet />
+          </div>
         </div>
-      </div>
+      ) : (
+        <Outlet />
+      )}
     </div>
   );
 }

@@ -7,7 +7,7 @@ export const meta: MetaFunction = () => [
 
 export default function About() {
   return (
-    <main className="max-w-3xl mx-auto px-6 py-16 md:py-24">
+    <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-4xl font-bold tracking-tight mb-8">About</h1>
       <div className="prose prose-neutral max-w-none space-y-6 text-muted-foreground leading-relaxed">
         <p className="text-foreground text-lg">

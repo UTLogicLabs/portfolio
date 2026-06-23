@@ -144,4 +144,16 @@ describe("ProjectDetail component", () => {
     await screen.findByRole("heading", { level: 1 }); // wait for render
     expect(screen.queryByRole("link", { name: /GitHub/i })).toBeNull();
   });
+
+  it("outer container uses max-w-4xl", async () => {
+    const Stub = createRoutesStub([{
+      path: "/projects/:slug",
+      Component: ProjectDetail,
+      loader: async () => baseLoader,
+    }]);
+    const { container } = render(<Stub initialEntries={["/projects/portfolio"]} />);
+    await screen.findByRole("heading", { level: 1 });
+    const outer = container.querySelector("main")!;
+    expect(outer.className).toContain("max-w-4xl");
+  });
 });

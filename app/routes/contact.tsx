@@ -47,7 +47,7 @@ export default function Contact() {
   const isSubmitting = navigation.state === "submitting";
 
   return (
-    <main className="max-w-xl mx-auto px-6 py-16 md:py-24">
+    <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-4xl font-bold tracking-tight mb-4">Get in Touch</h1>
       <p className="text-muted-foreground mb-10">
         Have a project in mind or just want to say hi? Fill out the form and

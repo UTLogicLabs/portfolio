@@ -30,4 +30,10 @@ describe("About page", () => {
     render(<About />);
     expect(screen.getByRole("link", { name: /blog/i })).toHaveAttribute("href", "/blog");
   });
+
+  it("outer container uses max-w-4xl", () => {
+    const { container } = render(<About />);
+    const outer = container.querySelector("main")!;
+    expect(outer.className).toContain("max-w-4xl");
+  });
 });
