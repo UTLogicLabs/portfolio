@@ -21,7 +21,7 @@ describe("BlogPost loader", () => {
 
 describe("BlogPost meta", () => {
   it("returns Not Found title when loaderData is undefined", () => {
-    const result = meta({ data: undefined, params: {}, matches: [] } as unknown as Parameters<typeof meta>[0]);
+    const result = meta({ data: undefined as never, loaderData: undefined as never, params: { slug: "" }, matches: [] as never, location: {} as never });
     expect(result).toContainEqual({ title: "Not Found" });
   });
 
@@ -31,9 +31,11 @@ describe("BlogPost meta", () => {
         frontmatter: { title: "Hello, World", description: "The first post.", date: "2026-06-21" },
         slug: "hello-world",
       },
-      params: {},
-      matches: [],
-    } as unknown as Parameters<typeof meta>[0]);
+      loaderData: undefined as never,
+      params: { slug: "hello-world" },
+      matches: [] as never,
+      location: {} as never,
+    });
     expect(result).toContainEqual({ title: "Hello, World — Joshua Dix" });
     expect(result).toContainEqual({ name: "description", content: "The first post." });
   });

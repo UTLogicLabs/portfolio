@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -30,6 +30,12 @@ jobs:
 
       - name: Generate Prisma client
         run: npm run db:generate
+
+      - name: Generate React Router types
+        run: npx react-router typegen
+
+      - name: Generate Wrangler types
+        run: npx wrangler types
 
       - name: Typecheck
         run: npm run typecheck
@@ -43,11 +49,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Initialise local D1 schema
+        run: npm run db:migrate:init
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
-
-      - name: Seed local D1 (contact form E2E writes to it)
-        run: npm run db:migrate:init
 
       - name: E2E tests
         run: npm run test:e2e

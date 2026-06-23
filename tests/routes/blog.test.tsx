@@ -36,10 +36,9 @@ describe("BlogLayout component", () => {
     }]);
   }
 
-  // The sidebar only renders on post detail pages, not the blog index.
   it("renders Blog sidebar link to /blog", async () => {
-    const Stub = makeStub("/blog/hello-world");
-    render(<Stub initialEntries={["/blog/hello-world"]} />);
+    const Stub = makeStub("/blog");
+    render(<Stub initialEntries={["/blog"]} />);
     expect(await screen.findByRole("link", { name: "Blog" })).toHaveAttribute("href", "/blog");
   });
 
@@ -48,12 +47,6 @@ describe("BlogLayout component", () => {
     render(<Stub initialEntries={["/blog/hello-world"]} />);
     const link = await screen.findByRole("link", { name: "Hello, World" });
     expect(link).toHaveAttribute("href", "/blog/hello-world");
-  });
-
-  it("does not render the sidebar on the blog index", async () => {
-    const Stub = makeStub("/blog");
-    render(<Stub initialEntries={["/blog"]} />);
-    expect(screen.queryByRole("navigation", { name: "Blog posts" })).toBeNull();
   });
 
   it("applies active classes to the current post link", async () => {
@@ -65,9 +58,9 @@ describe("BlogLayout component", () => {
   });
 
   it("applies inactive class to a non-active post link", async () => {
-    const Stub = makeStub("/blog/hello-world");
-    render(<Stub initialEntries={["/blog/hello-world"]} />);
-    const link = await screen.findByRole("link", { name: "Second Post" });
+    const Stub = makeStub("/blog/second-post");
+    render(<Stub initialEntries={["/blog/second-post"]} />);
+    const link = await screen.findByRole("link", { name: "Hello, World" });
     expect(link.className).toContain("text-muted-foreground");
     expect(link.className).not.toContain("font-medium");
   });

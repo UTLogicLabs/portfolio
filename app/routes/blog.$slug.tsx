@@ -1,6 +1,6 @@
 import { data } from "react-router";
-import type { MetaFunction } from "react-router";
 import type { ComponentType } from "react";
+import type { Route } from "./+types/blog.$slug";
 
 interface PostFrontmatter {
   title: string;
@@ -29,8 +29,7 @@ export async function loader({ params }: { params: { slug: string } }) {
   };
 }
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  const loaderData = data as Awaited<ReturnType<typeof loader>> | undefined;
+export const meta: Route.MetaFunction = ({ data: loaderData }) => {
   if (!loaderData) return [{ title: "Not Found" }];
   return [
     { title: `${loaderData.frontmatter.title} — Joshua Dix` },

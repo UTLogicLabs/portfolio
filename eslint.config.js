@@ -1,8 +1,8 @@
 import js from "@eslint/js";
-import globals from "globals";
 import tseslint from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
 import reactHooksPlugin from "eslint-plugin-react-hooks";
+import globals from "globals";
 
 export default tseslint.config(
   js.configs.recommended,
@@ -30,18 +30,18 @@ export default tseslint.config(
     },
   },
   {
-    files: ["scripts/**/*.js", "*.config.{js,ts}"],
+    files: ["scripts/**/*.js"],
     languageOptions: {
-      globals: { ...globals.node },
+      globals: globals.node,
     },
   },
   {
     ignores: [
       "build/**",
+      "dist/**",
       ".react-router/**",
       ".wrangler/**",
       "node_modules/**",
-      "app/generated/**",
       "public/icons/sprite.svg",
       "worker-configuration.d.ts",
     ],
