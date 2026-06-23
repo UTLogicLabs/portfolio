@@ -31,6 +31,12 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate
 
+      - name: Generate React Router types
+        run: npx react-router typegen
+
+      - name: Generate Wrangler types
+        run: npx wrangler types
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -42,6 +48,9 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Initialise local D1 schema
+        run: npm run db:migrate:init
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
