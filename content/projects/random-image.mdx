@@ -7,17 +7,29 @@ repo: 'https://github.com/UTLogicLabs/randomImage'
 featured: false
 ---
 
-A local development tool for serving random placeholder images by dimensions — built for use during development when you need realistic image content without hitting an external service.
+A local development tool for serving random placeholder images by dimensions — the Lorem Picsum experience, running entirely on your own machine against your own images.
 
 ## Background
 
-This project started during my internship at The Church of Jesus Christ of Latter-day Saints, where the team needed a way to serve placeholder images for an internal project. I later rebuilt it with Node.js and Express, keeping the same simple URL-based interface that made Lorem Picsum so easy to use.
+During my internship at The Church of Jesus Christ of Latter-day Saints, the team was building UI mockups and needed realistic placeholder images without depending on an external service. Lorem Picsum was the obvious inspiration, but we needed something that worked offline and pulled from our own image library.
 
-It requires a local folder of images to pull from — point it at your own image directory and it handles the rest.
+I built the original version during that internship, then came back to it later and rewrote it with cleaner code — same Node.js and Express stack, same URL-based interface, just a much better implementation.
+
+## Setup
+
+The server expects your images to live in a folder named `images` one level above the project root (`../images`). Drop your images there, start the server, and the API is ready.
+
+```
+your-workspace/
+├── images/        ← your image library goes here
+└── randomImage/   ← the project
+```
 
 ## How It Works
 
 Requests are structured around width and height path segments. Hit `/200/300` and you get back a 200×300 image randomly selected from your local image folder. Every request is stateless — no auth, no sessions, just a URL that returns an image.
+
+What sets it apart from simply pointing a static file server at a folder is the full API surface: seed-based determinism for consistent results across renders, direct image targeting by ID, and on-the-fly image effects. You can drop these URLs anywhere in a mockup and get predictable, realistic images every time.
 
 To get consistent results across requests, pass a `seed` value and the same image will always be returned for that seed. To target a specific image, swap in an `id` instead.
 
