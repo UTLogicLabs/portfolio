@@ -1,9 +1,9 @@
-name: Deploy
+name: Content Deploy
 
 on:
   push:
     branches: [main]
-    paths-ignore:
+    paths:
       - 'content/**'
 
 concurrency:
@@ -38,8 +38,6 @@ jobs:
     if: needs.check-secrets.outputs.secrets_available == 'true'
     runs-on: ubuntu-latest
 
-    # Branch protection rules should require CI to pass before this runs.
-    # Set up in: GitHub → Settings → Branches → Require status checks.
     environment:
       name: production
       url: https://portfolio.jadix117.workers.dev
