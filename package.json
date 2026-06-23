@@ -1,13 +1,13 @@
 {
   "name": "portfolio",
   "version": "1.0.0",
-  "description": "Personal portfolio site — React Router v7 on Cloudflare Pages",
+  "description": "Personal portfolio site — React Router v7 on Cloudflare Workers",
   "type": "module",
   "scripts": {
     "dev": "vite dev --host",
     "build": "react-router build",
     "preview": "wrangler pages dev",
-    "deploy": "wrangler pages deploy ./dist/client",
+    "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
