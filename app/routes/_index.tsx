@@ -10,7 +10,60 @@ export const meta: MetaFunction = () => [
   },
 ];
 
-export default function Home() {
+interface PostFrontmatter {
+  title: string;
+  date: string;
+  description: string;
+  tags?: string[];
+  featured?: boolean;
+}
+
+interface ProjectFrontmatter {
+  title: string;
+  description: string;
+  date: string;
+  tech: string[];
+  url?: string;
+  repo?: string;
+  featured?: boolean;
+}
+
+export async function loader() {
+  const projectModules = import.meta.glob<{ frontmatter: ProjectFrontmatter }>(
+    "../../content/projects/*.mdx",
+    { eager: true }
+  );
+  const postModules = import.meta.glob<{ frontmatter: PostFrontmatter }>(
+    "../../content/blog/*.mdx",
+    { eager: true }
+  );
+
+  const featuredProjects = Object.entries(projectModules)
+    .map(([path, mod]) => ({
+      slug: path.split("/").at(-1)!.replace(/\.mdx$/, ""),
+      ...mod.frontmatter,
+    }))
+    .filter((p) => p.featured)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const featuredPosts = Object.entries(postModules)
+    .map(([path, mod]) => ({
+      slug: path.split("/").at(-1)!.replace(/\.mdx$/, ""),
+      ...mod.frontmatter,
+    }))
+    .filter((p) => p.featured)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  return { featuredProjects, featuredPosts };
+}
+
+export default function Home({
+  loaderData,
+}: {
+  loaderData: Awaited<ReturnType<typeof loader>>;
+}) {
+  const { featuredProjects = [], featuredPosts = [] } = loaderData ?? {};
+
   return (
     <main className="min-h-screen">
       <section className="max-w-4xl mx-auto px-6 py-24 md:py-40">
@@ -51,6 +104,67 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {featuredProjects.length > 0 && (
+        <section className="max-w-4xl mx-auto px-6 pb-16 md:pb-24">
+          <h2 className="text-2xl font-bold tracking-tight mb-8">Featured Projects</h2>
+          <ul className="grid md:grid-cols-2 gap-6 list-none p-0">
+            {featuredProjects.map((project) => (
+              <li key={project.slug}>
+                <Link
+                  to={`/projects/${project.slug}`}
+                  className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
+                >
+                  <h3 className="text-lg font-semibold group-hover:text-primary transition-colors mb-2">
+                    {project.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {project.description}
+                  </p>
+                  <ul className="flex flex-wrap gap-2 list-none p-0">
+                    {project.tech.map((t) => (
+                      <li
+                        key={t}
+                        className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium"
+                      >
+                        {t}
+                      </li>
+                    ))}
+                  </ul>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {featuredPosts.length > 0 && (
+        <section className="max-w-4xl mx-auto px-6 pb-16 md:pb-24">
+          <h2 className="text-2xl font-bold tracking-tight mb-8">Featured Writing</h2>
+          <ol className="space-y-6 list-none p-0">
+            {featuredPosts.map((post) => (
+              <li key={post.slug}>
+                <Link
+                  to={`/blog/${post.slug}`}
+                  className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
+                >
+                  <time className="text-sm text-muted-foreground">
+                    {new Date(post.date).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </time>
+                  <h3 className="text-xl font-semibold mt-1 group-hover:text-primary transition-colors">
+                    {post.title}
+                  </h3>
+                  <p className="text-muted-foreground mt-1">{post.description}</p>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
     </main>
   );
 }
