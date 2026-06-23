@@ -5,7 +5,7 @@ import About, { meta } from "~/routes/about";
 describe("About meta", () => {
   it("returns the page title", () => {
     const result = meta({ data: undefined as never, loaderData: undefined as never, params: {}, matches: [] as never[], location: {} as never });
-    expect(result).toContainEqual({ title: "About — Joshua Dix" });
+    expect(result).toContainEqual({ title: "About — UTLogicLabs" });
   });
 });
 

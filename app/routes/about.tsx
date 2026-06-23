@@ -1,8 +1,8 @@
 import type { MetaFunction } from "react-router";
 
 export const meta: MetaFunction = () => [
-  { title: "About — Joshua Dix" },
-  { name: "description", content: "About Joshua Dix — background, skills, and experience." },
+  { title: "About — UTLogicLabs" },
+  { name: "description", content: "About UTLogicLabs — background, skills, and experience." },
 ];
 
 export default function About() {

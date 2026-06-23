@@ -12,7 +12,7 @@ function renderNav(path = "/") {
 describe("Nav", () => {
   it("renders the wordmark linking to /", () => {
     renderNav();
-    const wordmark = screen.getByRole("link", { name: "Joshua Dix" });
+    const wordmark = screen.getByRole("link", { name: "UTLogicLabs" });
     expect(wordmark).toBeInTheDocument();
     expect(wordmark).toHaveAttribute("href", "/");
   });
