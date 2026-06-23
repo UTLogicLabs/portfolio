@@ -40,7 +40,7 @@ export default function BlogIndex({
   const { posts } = loaderData;
 
   return (
-    <div>
+    <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
       <h1 className="text-4xl font-bold tracking-tight mb-12">Blog</h1>
       {posts.length === 0 ? (
         <p className="text-muted-foreground">No posts yet. Check back soon.</p>
@@ -68,6 +68,6 @@ export default function BlogIndex({
           ))}
         </ol>
       )}
-    </div>
+    </main>
   );
 }

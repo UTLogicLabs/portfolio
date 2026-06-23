@@ -50,7 +50,7 @@ export default function ProjectDetail({
   const Project = mod?.default;
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-16 md:py-24">
+    <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
       <header className="mb-12">
         <h1 className="text-4xl font-bold tracking-tight mb-4">
           {frontmatter.title}

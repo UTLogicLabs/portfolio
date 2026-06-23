@@ -109,4 +109,11 @@ describe("Contact component", () => {
       expect(screen.getByRole("status")).toHaveTextContent(/message sent/i)
     );
   });
+
+  it("outer container uses max-w-4xl", () => {
+    const Stub = createRoutesStub([{ path: "/contact", Component: Contact }]);
+    const { container } = render(<Stub initialEntries={["/contact"]} />);
+    const outer = container.querySelector("main")!;
+    expect(outer.className).toContain("max-w-4xl");
+  });
 });
