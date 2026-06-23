@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
@@ -15,7 +15,7 @@ type DataResult<T> = { data: T; init: { status: number } };
 
 describe("contact meta", () => {
   it("returns the page title", () => {
-    const result = meta({ data: undefined as never, params: {}, matches: [] });
+    const result = meta({ data: undefined as never, loaderData: undefined as never, params: {}, matches: [] as never[], location: {} as never });
     expect(result).toContainEqual({ title: "Contact — Joshua Dix" });
   });
 });
@@ -34,7 +34,7 @@ describe("contact action — validation", () => {
     const mockDB = {} as D1Database;
     const mockContext = { cloudflare: { env: { DB: mockDB }, ctx: {} as ExecutionContext } };
 
-    return action({ request, context: mockContext as never, params: {} });
+    return action({ request, context: mockContext as never, params: {} } as never);
   }
 
   it("returns 422 when name is missing", async () => {

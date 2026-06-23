@@ -7,7 +7,7 @@ const Stub = createRoutesStub([{ path: "/", Component: Home }]);
 
 describe("Home meta", () => {
   it("returns the page title", () => {
-    const result = meta({ data: undefined as never, params: {}, matches: [] });
+    const result = meta({ data: undefined as never, loaderData: undefined as never, params: {}, matches: [] as never[], location: {} as never });
     expect(result).toContainEqual({ title: "Joshua Dix — Software Engineer" });
   });
 });
