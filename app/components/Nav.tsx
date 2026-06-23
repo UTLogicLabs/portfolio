@@ -26,7 +26,7 @@ export function Nav() {
           to="/"
           className="font-semibold text-foreground hover:text-primary transition-colors"
         >
-          Joshua Dix
+          UTLogicLabs
         </Link>
 
         {/* Desktop links */}

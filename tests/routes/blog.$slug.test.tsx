@@ -36,7 +36,7 @@ describe("BlogPost meta", () => {
       matches: [] as never,
       location: {} as never,
     });
-    expect(result).toContainEqual({ title: "Hello, World — Joshua Dix" });
+    expect(result).toContainEqual({ title: "Hello, World — UTLogicLabs" });
     expect(result).toContainEqual({ name: "description", content: "The first post." });
   });
 });

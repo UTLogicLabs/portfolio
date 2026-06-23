@@ -31,7 +31,7 @@ export async function loader({ params }: { params: { slug: string } }) {
 export const meta: Route.MetaFunction = ({ data: loaderData }) => {
   if (!loaderData) return [{ title: "Not Found" }];
   return [
-    { title: `${loaderData.frontmatter.title} — Joshua Dix` },
+    { title: `${loaderData.frontmatter.title} — UTLogicLabs` },
     { name: "description", content: loaderData.frontmatter.description },
   ];
 };

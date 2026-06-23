@@ -2,7 +2,7 @@ import type { MetaFunction } from "react-router";
 import { Link } from "react-router";
 
 export const meta: MetaFunction = () => [
-  { title: "Blog — Joshua Dix" },
+  { title: "Blog — UTLogicLabs" },
   { name: "description", content: "Writing on software, craft, and things I'm figuring out." },
 ];
 

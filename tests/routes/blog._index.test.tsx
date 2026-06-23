@@ -6,7 +6,7 @@ import BlogIndex, { loader, meta } from "~/routes/blog._index";
 describe("BlogIndex meta", () => {
   it("returns the page title", () => {
     const result = meta({ data: undefined as never, loaderData: undefined as never, params: {}, matches: [] as never[], location: {} as never });
-    expect(result).toContainEqual({ title: "Blog — Joshua Dix" });
+    expect(result).toContainEqual({ title: "Blog — UTLogicLabs" });
   });
 });
 
