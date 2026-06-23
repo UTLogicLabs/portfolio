@@ -1,0 +1,37 @@
+---
+title: 'Random Image API'
+description: 'A random image generator API similar to Lorem Picsum — fetch placeholder images by size, ID, or seed with optional grayscale and blur effects.'
+date: '2023-09-29'
+tech: ['Node.js', 'Express', 'JavaScript']
+repo: 'https://github.com/UTLogicLabs/randomImage'
+featured: false
+---
+
+A local development tool for serving random placeholder images by dimensions — built for use during development when you need realistic image content without hitting an external service.
+
+## Background
+
+This project started during my internship at The Church of Jesus Christ of Latter-day Saints, where the team needed a way to serve placeholder images for an internal project. I later rebuilt it with Node.js and Express, keeping the same simple URL-based interface that made Lorem Picsum so easy to use.
+
+It requires a local folder of images to pull from — point it at your own image directory and it handles the rest.
+
+## How It Works
+
+Requests are structured around width and height path segments. Hit `/200/300` and you get back a 200×300 image randomly selected from your local image folder. Every request is stateless — no auth, no sessions, just a URL that returns an image.
+
+To get consistent results across requests, pass a `seed` value and the same image will always be returned for that seed. To target a specific image, swap in an `id` instead.
+
+## API Reference
+
+| Endpoint                           | Description                          |
+| ---------------------------------- | ------------------------------------ |
+| `/:width/:height`                  | Random image at the given dimensions |
+| `/image/id/:id/:width/:height`     | Specific image by ID                 |
+| `/image/seed/:seed/:width/:height` | Deterministic random image by seed   |
+
+**Query parameters** work on any endpoint:
+
+- `?grayscale` — convert the image to black and white
+- `?blur=1–10` — apply a blur effect at the given intensity
+
+Example: `/image/id/42/400/300?grayscale&blur=2` returns image 42 at 400×300, grayscale with a light blur.
