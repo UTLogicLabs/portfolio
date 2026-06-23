@@ -33,4 +33,10 @@ describe("Home page", () => {
     render(<Stub initialEntries={["/"]} />);
     expect(await screen.findByRole("link", { name: /Get in Touch/i })).toHaveAttribute("href", "/contact");
   });
+
+  it("renders the avatar image", async () => {
+    render(<Stub initialEntries={["/"]} />);
+    const img = await screen.findByRole("img", { name: "Joshua Dix" });
+    expect(img).toHaveAttribute("src", "/avatar.png");
+  });
 });

@@ -8,11 +8,20 @@ export const meta: MetaFunction = () => [
 export default function About() {
   return (
     <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
-      <h1 className="text-4xl font-bold tracking-tight mb-8">About</h1>
+      <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12 mb-10">
+        <img
+          src="/avatar.png"
+          alt="Joshua Dix"
+          className="w-40 h-40 rounded-full object-cover shrink-0 shadow-md"
+        />
+        <div>
+          <h1 className="text-4xl font-bold tracking-tight mb-4">About</h1>
+          <p className="text-foreground text-lg">
+            I&apos;m Joshua Dix, a software engineer based in the US.
+          </p>
+        </div>
+      </div>
       <div className="prose prose-neutral max-w-none space-y-6 text-muted-foreground leading-relaxed">
-        <p className="text-foreground text-lg">
-          I&apos;m Joshua Dix, a software engineer based in the US.
-        </p>
         <p>
           I build full-stack web applications with a focus on developer
           experience, performance, and clean architecture. I enjoy working
