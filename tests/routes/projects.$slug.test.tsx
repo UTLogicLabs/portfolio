@@ -40,7 +40,7 @@ describe("ProjectDetail meta", () => {
       matches: [] as never,
       location: {} as never,
     });
-    expect(result).toContainEqual({ title: "This Portfolio — Joshua Dix" });
+    expect(result).toContainEqual({ title: "This Portfolio — UTLogicLabs" });
     expect(result).toContainEqual({ name: "description", content: "Personal portfolio site." });
   });
 });

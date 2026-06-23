@@ -16,7 +16,7 @@ type DataResult<T> = { data: T; init: { status: number } };
 describe("contact meta", () => {
   it("returns the page title", () => {
     const result = meta({ data: undefined as never, loaderData: undefined as never, params: {}, matches: [] as never[], location: {} as never });
-    expect(result).toContainEqual({ title: "Contact — Joshua Dix" });
+    expect(result).toContainEqual({ title: "Contact — UTLogicLabs" });
   });
 });
 

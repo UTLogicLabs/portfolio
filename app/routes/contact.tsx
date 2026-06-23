@@ -4,8 +4,8 @@ import type { AppLoadContext } from "react-router";
 import { getPrisma } from "~/db.server";
 
 export const meta: MetaFunction = () => [
-  { title: "Contact — Joshua Dix" },
-  { name: "description", content: "Get in touch with Joshua Dix." },
+  { title: "Contact — UTLogicLabs" },
+  { name: "description", content: "Get in touch with UTLogicLabs." },
 ];
 
 interface ActionData {
