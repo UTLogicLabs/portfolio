@@ -1,0 +1,88 @@
+---
+title: "Getting This Site onto Cloudflare Workers"
+date: "2026-06-22"
+description: "The three-commit journey from a broken Pages config to a working Workers deploy — and what each fix actually solved."
+tags: ["cloudflare", "devops", "react-router"]
+---
+
+The site was built, CI was wired up, and the first push to `main` promptly failed. Three commits to sort it out. Here's what went wrong and why each fix worked.
+
+## Why Workers, not Pages
+
+Cloudflare offers two products that can host a web app: Pages and Workers. Pages is designed for static sites and simple deploys — you point it at a build output and it handles the rest. Workers is a compute platform: you write a JavaScript handler, and Cloudflare runs it at the edge.
+
+This site uses React Router v7 with server-side rendering. Every request that hits the origin needs to run through a Worker that renders the page on the server before sending HTML back. Pages *can* do SSR via a Functions directory, but the mental model is awkward — you end up with a Worker anyway, just hidden behind a Pages abstraction. Starting directly with Workers is cleaner.
+
+The Worker entry lives at `workers/app.ts`:
+
+```ts
+import { createRequestHandler } from "@react-router/cloudflare";
+import * as build from "virtual:react-router/server-build";
+
+const handler = createRequestHandler({ build, mode: process.env.NODE_ENV });
+
+export default {
+  fetch(request, env, ctx) {
+    return handler({ request, env, waitUntil: ctx.waitUntil.bind(ctx) });
+  },
+} satisfies ExportedHandler<Env>;
+```
+
+That `virtual:react-router/server-build` import is a Vite virtual module — it doesn't correspond to a real file. That becomes relevant shortly.
+
+## The config conflict
+
+Wrangler 4.x draws a hard line between Workers and Pages. A config file with `main` is a Workers config. A config file with `pages_build_output_dir` is a Pages config. You can't have both.
+
+The problem: `@cloudflare/vite-plugin` needs `main` in the wrangler config to spin up a local `workerd` process during `vite dev`. So `main` needs to be there for local development — but it broke the Pages deployment.
+
+The fix was to split into two files:
+
+**`wrangler.dev.toml`** — used by the Vite plugin during local development:
+
+```toml
+name = "portfolio"
+compatibility_date = "2025-01-01"
+main = "workers/app.ts"
+
+[[d1_databases]]
+binding = "portfolio_db"
+database_name = "portfolio-db"
+database_id = "122d7ae4-5846-47fd-aec8-05176168f84f"
+```
+
+**`vite.config.ts`** tells the plugin which file to use:
+
+```ts
+cloudflare({ configPath: "./wrangler.dev.toml" })
+```
+
+And the production `wrangler.toml` stays clean for deployment.
+
+## Switching the deploy workflow
+
+With Pages out of the picture, the GitHub Actions workflow needed two changes: swap `wrangler pages deploy` for `wrangler deploy`, and add an `[assets]` block so Wrangler knows to serve the static client bundle alongside the SSR Worker:
+
+```toml
+[assets]
+directory = "./dist/client"
+```
+
+Without `[assets]`, the Worker handles every request — including ones that should just return a JS chunk or a CSS file. Pointing Wrangler at the build output lets it serve those statically.
+
+## The virtual module esbuild can't see
+
+This was the last error and the least obvious one.
+
+`wrangler deploy` bundles `workers/app.ts` with esbuild, not Vite. Esbuild has no concept of Vite virtual modules. When it hits `import * as build from "virtual:react-router/server-build"`, it has no idea what to do with that specifier.
+
+Wrangler's `[alias]` section solves this. It maps import specifiers to real file paths before esbuild runs:
+
+```toml
+[alias]
+"virtual:react-router/server-build" = "./dist/server/index.js"
+```
+
+The React Router build already writes the server bundle to `dist/server/index.js` — that's the file the virtual module would have resolved to in Vite. The alias just makes that mapping explicit for esbuild.
+
+CI is green. The site is live at `portfolio.jadix117.workers.dev`. Each fix was small once I understood which layer owned the problem — the frustrating part was figuring out which layer that was.
