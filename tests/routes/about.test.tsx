@@ -36,4 +36,10 @@ describe("About page", () => {
     const outer = container.querySelector("main")!;
     expect(outer.className).toContain("max-w-4xl");
   });
+
+  it("renders the avatar image", () => {
+    render(<About />);
+    const img = screen.getByRole("img", { name: "Joshua Dix" });
+    expect(img).toHaveAttribute("src", "/avatar.png");
+  });
 });
