@@ -2,7 +2,7 @@ name: Content Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [master]
     paths:
       - 'content/**'
 
