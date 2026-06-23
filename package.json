@@ -4,10 +4,10 @@
   "description": "Personal portfolio site — React Router v7 on Cloudflare Pages",
   "type": "module",
   "scripts": {
-    "dev": "react-router dev -- --host",
+    "dev": "vite dev --host",
     "build": "react-router build",
     "preview": "wrangler pages dev",
-    "deploy": "wrangler pages deploy ./build/client",
+    "deploy": "wrangler pages deploy ./dist/client",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

@@ -21,6 +21,9 @@ migration.sql
 .env.*
 .dev.vars
 
+# Wrangler generated types (run `wrangler types` in CI / locally)
+worker-configuration.d.ts
+
 # Playwright
 playwright-report/
 test-results/
