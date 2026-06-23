@@ -29,25 +29,25 @@ test.describe("Blog", () => {
 test.describe("Blog post sidebar", () => {
   test("sidebar is not visible on the blog index", async ({ page }) => {
     await page.goto("/blog");
-    await expect(page.getByRole("navigation")).not.toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Posts" })).not.toBeVisible();
   });
 
   test("sidebar is visible on a blog post page", async ({ page }) => {
     await page.goto("/blog/hello-world");
-    await expect(page.getByRole("navigation")).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Posts" })).toBeVisible();
   });
 
   test("sidebar lists blog posts", async ({ page }) => {
     await page.goto("/blog/hello-world");
     await expect(
-      page.getByRole("navigation").getByRole("link", { name: "Hello, World" })
+      page.getByRole("navigation", { name: "Posts" }).getByRole("link", { name: "Hello, World" })
     ).toBeVisible();
   });
 
   test("active post link is visually distinguished", async ({ page }) => {
     await page.goto("/blog/hello-world");
     const activeLink = page
-      .getByRole("navigation")
+      .getByRole("navigation", { name: "Posts" })
       .getByRole("link", { name: "Hello, World" });
     await expect(activeLink).toHaveClass(/font-medium/);
   });
@@ -55,7 +55,7 @@ test.describe("Blog post sidebar", () => {
   test("clicking a sidebar link navigates to that post", async ({ page }) => {
     await page.goto("/blog/hello-world");
     await page
-      .getByRole("navigation")
+      .getByRole("navigation", { name: "Posts" })
       .getByRole("link", { name: "Hello, World" })
       .click();
     await expect(page).toHaveURL("/blog/hello-world");

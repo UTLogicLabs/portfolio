@@ -3,7 +3,10 @@ import { render, screen } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
 import BlogLayout, { loader } from "~/routes/blog";
 
-const mockPosts = [{ slug: "hello-world", title: "Hello, World", date: "2026-06-21" }];
+const mockPosts = [
+  { slug: "hello-world", title: "Hello, World", date: "2026-06-21" },
+  { slug: "second-post", title: "Second Post", date: "2026-06-20" },
+];
 
 describe("BlogLayout loader", () => {
   it("returns a posts array", async () => {
@@ -24,7 +27,7 @@ describe("BlogLayout loader", () => {
 });
 
 describe("BlogLayout component", () => {
-  function makeStub(path: string) {
+  function makeStub(_path: string) {
     return createRoutesStub([{
       path: "/blog",
       Component: BlogLayout,
@@ -40,8 +43,8 @@ describe("BlogLayout component", () => {
   });
 
   it("renders post links in the sidebar", async () => {
-    const Stub = makeStub("/blog");
-    render(<Stub initialEntries={["/blog"]} />);
+    const Stub = makeStub("/blog/hello-world");
+    render(<Stub initialEntries={["/blog/hello-world"]} />);
     const link = await screen.findByRole("link", { name: "Hello, World" });
     expect(link).toHaveAttribute("href", "/blog/hello-world");
   });
@@ -55,8 +58,8 @@ describe("BlogLayout component", () => {
   });
 
   it("applies inactive class to a non-active post link", async () => {
-    const Stub = makeStub("/blog");
-    render(<Stub initialEntries={["/blog"]} />);
+    const Stub = makeStub("/blog/second-post");
+    render(<Stub initialEntries={["/blog/second-post"]} />);
     const link = await screen.findByRole("link", { name: "Hello, World" });
     expect(link.className).toContain("text-muted-foreground");
     expect(link.className).not.toContain("font-medium");

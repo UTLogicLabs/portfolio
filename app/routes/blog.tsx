@@ -43,24 +43,26 @@ export default function BlogLayout({
           >
             Blog
           </Link>
-          <nav className="mt-4 space-y-1">
-            {posts.map((post) => {
-              const isActive = location.pathname === `/blog/${post.slug}`;
-              return (
-                <Link
-                  key={post.slug}
-                  to={`/blog/${post.slug}`}
-                  className={`block text-sm py-1 pr-2 transition-colors truncate ${
-                    isActive
-                      ? "text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {post.title}
-                </Link>
-              );
-            })}
-          </nav>
+          {/^\/blog\/.+/.test(location.pathname) && (
+            <nav aria-label="Posts" className="mt-4 space-y-1">
+              {posts.map((post) => {
+                const isActive = location.pathname === `/blog/${post.slug}`;
+                return (
+                  <Link
+                    key={post.slug}
+                    to={`/blog/${post.slug}`}
+                    className={`block text-sm py-1 pr-2 transition-colors truncate ${
+                      isActive
+                        ? "text-foreground font-medium"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {post.title}
+                  </Link>
+                );
+              })}
+            </nav>
+          )}
         </aside>
         <div className="flex-1 min-w-0">
           <Outlet />
