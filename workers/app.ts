@@ -3,6 +3,9 @@ import * as build from "virtual:react-router/server-build";
 
 interface Env {
   portfolio_db: D1Database;
+  EMAIL: SendEmail;
+  TURNSTILE_SECRET_KEY: string;
+  TURNSTILE_SITE_KEY: string;
 }
 
 declare module "react-router" {
