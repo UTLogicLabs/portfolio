@@ -110,6 +110,16 @@ export default function Contact() {
   const [turnstileReady, setTurnstileReady] = useState(false);
   const turnstileRef = useRef<HTMLDivElement>(null);
 
+  // React-approved derived state: adjust turnstileReady during render when a
+  // new bot-check error arrives, so we don't call setState inside an effect.
+  const [prevFormError, setPrevFormError] = useState(actionData?.errors?.form);
+  if (actionData?.errors?.form !== prevFormError) {
+    setPrevFormError(actionData?.errors?.form);
+    if (actionData?.errors?.form) {
+      setTurnstileReady(false);
+    }
+  }
+
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
@@ -132,7 +142,6 @@ export default function Contact() {
 
   useEffect(() => {
     if (actionData?.errors?.form) {
-      setTurnstileReady(false);
       (window as { turnstile?: { reset: (el?: Element | null) => void } }).turnstile?.reset(turnstileRef.current);
     }
   }, [actionData?.errors?.form]);
