@@ -43,6 +43,7 @@
     "react-dom": "^19.2.7",
     "react-router": "^7.18.0",
     "remark-frontmatter": "^5.0.0",
+    "remark-gfm": "^4.0.1",
     "remark-mdx-frontmatter": "^5.2.0"
   },
   "devDependencies": {

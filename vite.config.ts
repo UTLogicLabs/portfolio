@@ -3,6 +3,7 @@ import mdx from "@mdx-js/rollup";
 import { reactRouter } from "@react-router/dev/vite";
 import tailwindcss from "@tailwindcss/vite";
 import remarkFrontmatter from "remark-frontmatter";
+import remarkGfm from "remark-gfm";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import { iconsSpritesheet } from "vite-plugin-icons-spritesheet";
 import { defineConfig } from "vite";
@@ -16,7 +17,7 @@ export default defineConfig({
   },
   plugins: [
     cloudflare({ configPath: "./wrangler.dev.toml" }),
-    mdx({ remarkPlugins: [remarkFrontmatter, remarkMdxFrontmatter] }),
+    mdx({ remarkPlugins: [remarkFrontmatter, remarkGfm, remarkMdxFrontmatter] }),
     reactRouter(),
     tailwindcss(),
     iconsSpritesheet({
