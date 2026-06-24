@@ -1,5 +1,6 @@
-import { data, Form, useActionData, useNavigation } from "react-router";
-import type { ActionFunctionArgs, MetaFunction } from "react-router";
+import { useEffect } from "react";
+import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import type { AppLoadContext } from "react-router";
 import { getPrisma } from "~/db.server";
 
@@ -14,11 +15,52 @@ interface ActionData {
     name?: string;
     email?: string;
     message?: string;
+    form?: string;
   };
 }
 
+type CloudflareEnv = {
+  portfolio_db: D1Database;
+  EMAIL: SendEmail;
+  TURNSTILE_SECRET_KEY: string;
+  TURNSTILE_SITE_KEY: string;
+};
+
+export async function loader({ context }: LoaderFunctionArgs) {
+  const { cloudflare } = context as { cloudflare: { env: CloudflareEnv } };
+  return { turnstileSiteKey: cloudflare.env.TURNSTILE_SITE_KEY };
+}
+
 export async function action({ request, context }: ActionFunctionArgs & { context: AppLoadContext }) {
+  const { cloudflare } = context as { cloudflare: { env: CloudflareEnv; ctx: ExecutionContext } };
   const formData = await request.formData();
+
+  const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
+  const turnstileSecret = cloudflare.env.TURNSTILE_SECRET_KEY;
+  // Skip Turnstile when no secret is configured (local dev / CI).
+  // Production always has the secret set via `wrangler secret put`.
+  let turnstilePassed = !turnstileSecret;
+  if (turnstileSecret) {
+    try {
+      const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: turnstileSecret, response: turnstileToken }),
+      });
+      const verifyData = await verifyRes.json() as { success: boolean };
+      turnstilePassed = verifyData.success;
+    } catch {
+      // Network error calling siteverify — fail open to avoid blocking real users
+      turnstilePassed = true;
+    }
+  }
+  if (!turnstilePassed) {
+    return data<ActionData>(
+      { errors: { form: "Bot check failed. Please try again." } },
+      { status: 422 }
+    );
+  }
+
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const message = String(formData.get("message") ?? "").trim();
@@ -34,17 +76,45 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
     return data<ActionData>({ errors }, { status: 422 });
   }
 
-  const { cloudflare } = context as { cloudflare: { env: { portfolio_db: D1Database } } };
   const db = getPrisma(cloudflare.env.portfolio_db);
   await db.contactSubmission.create({ data: { name, email, message } });
+
+  // EMAIL binding is unavailable in local dev — guard and swallow errors so a
+  // send failure never prevents the success response from reaching the user.
+  if (cloudflare.env.EMAIL) {
+    try {
+      await cloudflare.env.EMAIL.send({
+        to: "joshua.dix@utlogiclabs.com",
+        from: { email: "contact@utlogiclabs.com", name: "Portfolio Contact Form" },
+        subject: `New message from ${name}`,
+        text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
+        html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p><p>${message}</p>`,
+      });
+    } catch {
+      // best-effort — log in production via wrangler tail if needed
+    }
+  }
 
   return data<ActionData>({ success: true });
 }
 
 export default function Contact() {
+  const loaderData = useLoaderData<typeof loader>();
+  const turnstileSiteKey = loaderData?.turnstileSiteKey ?? "";
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+    return () => {
+      document.head.removeChild(script);
+    };
+  }, []);
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
@@ -66,6 +136,12 @@ export default function Contact() {
         </div>
       ) : (
         <Form method="post" className="space-y-6" noValidate>
+          {actionData?.errors?.form && (
+            <p role="alert" className="text-red-500 text-sm">
+              {actionData.errors.form}
+            </p>
+          )}
+
           <div>
             <label htmlFor="name" className="block text-sm font-medium mb-1.5">
               Name
@@ -129,6 +205,11 @@ export default function Contact() {
               </p>
             )}
           </div>
+
+          <div
+            className="cf-turnstile"
+            data-sitekey={turnstileSiteKey}
+          />
 
           <button
             type="submit"

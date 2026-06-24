@@ -2,6 +2,9 @@ name = "portfolio"
 compatibility_date = "2025-01-01"
 main = "workers/app.ts"
 
+[vars]
+TURNSTILE_SITE_KEY = "0x4AAAAAADqc7R9L4pH0o4op"
+
 [assets]
 directory = "./dist/client"
 
@@ -12,3 +15,11 @@ directory = "./dist/client"
 binding = "portfolio_db"
 database_name = "portfolio-db"
 database_id = "122d7ae4-5846-47fd-aec8-05176168f84f"
+
+# send_email cannot be simulated by the local wrangler dev runner — keep it
+# in the production env only. Deploy with: wrangler deploy --env production
+[env.production]
+name = "portfolio"
+
+[[env.production.send_email]]
+name = "EMAIL"
