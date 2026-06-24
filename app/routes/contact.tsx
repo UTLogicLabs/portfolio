@@ -122,11 +122,11 @@ export default function Contact() {
   }, []);
 
   useEffect(() => {
-    (window as Record<string, unknown>).onTurnstileComplete = () => setTurnstileReady(true);
-    (window as Record<string, unknown>).onTurnstileExpired = () => setTurnstileReady(false);
+    (window as unknown as Record<string, unknown>).onTurnstileComplete = () => setTurnstileReady(true);
+    (window as unknown as Record<string, unknown>).onTurnstileExpired = () => setTurnstileReady(false);
     return () => {
-      delete (window as Record<string, unknown>).onTurnstileComplete;
-      delete (window as Record<string, unknown>).onTurnstileExpired;
+      delete (window as unknown as Record<string, unknown>).onTurnstileComplete;
+      delete (window as unknown as Record<string, unknown>).onTurnstileExpired;
     };
   }, []);
 
