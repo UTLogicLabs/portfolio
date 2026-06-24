@@ -36,16 +36,23 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   const formData = await request.formData();
 
   const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
-  const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      secret: cloudflare.env.TURNSTILE_SECRET_KEY,
-      response: turnstileToken,
-    }),
-  });
-  const verifyData = await verifyRes.json() as { success: boolean };
-  if (!verifyData.success) {
+  let turnstilePassed = false;
+  try {
+    const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        secret: cloudflare.env.TURNSTILE_SECRET_KEY,
+        response: turnstileToken,
+      }),
+    });
+    const verifyData = await verifyRes.json() as { success: boolean };
+    turnstilePassed = verifyData.success;
+  } catch {
+    // Treat siteverify network failures as a pass so real users aren't blocked
+    turnstilePassed = true;
+  }
+  if (!turnstilePassed) {
     return data<ActionData>(
       { errors: { form: "Bot check failed. Please try again." } },
       { status: 422 }
