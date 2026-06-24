@@ -1,0 +1,134 @@
+---
+title: 'The Blindman — Full-Stack Business Platform'
+description: 'A production SaaS platform managing end-to-end business operations — from customer proposals and e-signatures through factory production and CNC hardware control — for a Utah window-treatment manufacturer.'
+date: '2026-06-24'
+tech:
+  [
+    'React',
+    'Node.js',
+    'Java',
+    'TypeScript',
+    'MSSQL',
+    'PostgreSQL',
+    'MUI',
+    'PDF',
+    'Play Framework',
+  ]
+featured: true
+---
+
+## Overview
+
+The Blindman is a purpose-built business platform for a Utah-based window treatment manufacturer that sells, fabricates, and installs custom blinds, shades, and shutters. The system covers the entire company lifecycle: a sales rep creates a proposal and collects a customer e-signature, an office manager converts it into a work order, factory workers pull it off a real-time production queue, and a CNC saw cuts the material based on the specs — all without leaving the platform.
+
+The workspace is composed of five interconnected applications and microservices, each built for a specific audience and evolved iteratively over several years of production use.
+
+> **Role:** Sole developer for 3 years. Inherited the codebase from an offshore team and legacy code and took full ownership — architecting new services, refactoring legacy code, and shipping every feature since. Responsible for the full stack: React frontend, Node.js API, Java/Play ERP, factory dashboard, PDF pipeline, and all infrastructure and deployments.
+
+---
+
+## The Problem
+
+Before this platform existed, the company relied on a patchwork of spreadsheets, printed forms, and manual data entry to track proposals, pricing, and production. There was no single source of truth for whether an order had been signed, what stage of fabrication it was in, or how much material was in stock. Errors surfaced late — sometimes not until installation day.
+
+The goal was to replace that process with a system where data flows automatically from the first customer conversation through to the factory floor, and every stakeholder has a view tailored to their role.
+
+---
+
+## Architecture
+
+The platform is split across five purpose-built services sitting behind an NGINX reverse proxy, all sharing two databases and a Cloudflare R2 document store.
+
+```
+┌───────────────────────────────────────────────┐
+│               NGINX Reverse Proxy             │
+└───────────────────────────────────────────────┘
+         ↓              ↓               ↓
+  ┌────────────┐  ┌──────────────┐  ┌──────────────┐
+  │ Client SPA │  │  API Server  │  │  Interweb    │
+  │  React 18  │  │  Node/Express│  │  Play/Java   │
+  └────────────┘  └──────────────┘  └──────────────┘
+         ↓              ↓
+  ┌────────────┐  ┌──────────────────────────┐
+  │  Factory   │  │     Microservices        │
+  │  Dashboard │  │  ├─ PDF Merger (3003)    │
+  │ React Rtr7 │  │  └─ Heartbeat (daemon)   │
+  └────────────┘  └──────────────────────────┘
+                          ↓
+            ┌──────────────────────────┐
+            │       Databases          │
+            │  ├─ SQL Server (primary) │
+            │  ├─ PostgreSQL (RBAC)    │
+            │  └─ Redis (sessions)     │
+            └──────────────────────────┘
+                          ↓
+            ┌──────────────────────────┐
+            │    Cloudflare R2         │
+            │  (signed PDFs, invoices) │
+            └──────────────────────────┘
+```
+
+**Dual database strategy.** The core business data — proposals, customers, production orders — lives in a SQL Server database that predates this project. Rather than rewriting that schema, newer concerns like user accounts and role-based access control were built on PostgreSQL, allowing the system to evolve without a risky big-bang migration. The API server queries both transparently.
+
+**External integrations.** Adobe Sign handles e-signature collection and status polling. Google Calendar syncs customer appointments per-user via OAuth 2.0. Braintree processes payments. A TigerStop CNC saw is controlled in real time via a WebSocket bridge to a Windows process that speaks serial.
+
+---
+
+## Tech Stack
+
+| Service               | Runtime              | Key Libraries                                                                  |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------ |
+| **Client**            | React 18, CRA        | MUI v7, React Router v6, `@react-pdf/renderer` v4, Recharts, Cypress           |
+| **API Server**        | Node.js 18, Express  | mssql v10, pg v8, Redis, Passport + JWT, Nodemailer, Winston                   |
+| **Factory Dashboard** | React Router 7 (SSR) | Prisma v7 + MSSQL adapter, TypeScript strict, TailwindCSS v4, Vite, Playwright |
+| **Interweb ERP**      | Play 3 / Java 21     | Scala 2.13, JDBI v3, Deadbolt RBAC, OpenPDF, Google Calendar API               |
+| **PDF Merger**        | Node.js, Express     | pdf-lib v1.17, Multer                                                          |
+| **Heartbeat**         | Node.js daemon       | Adobe Sign API, pg, rotating-file-stream                                       |
+
+---
+
+## Key Features
+
+**Proposal-to-signature workflow.** A sales rep selects a customer, configures each window covering with real product SKUs and pricing lookups, and generates a branded PDF — all client-side with `@react-pdf/renderer` so there's no server round-trip for the preview. Once the customer is happy, the PDF is pushed to Adobe Sign and both parties sign electronically. The Heartbeat daemon polls Adobe Sign every 30 seconds, detects completion, downloads the signed document, and triggers automatic work order creation.
+
+**Factory production queues.** The Factory Dashboard (React Router 7 with SSR) gives floor workers a real-time view of their station's queue — broken down by product category (blinds, roller shades, soft shades, shutters, drapes). Workers clock in, pull orders off the queue, and mark stages complete. Data loads via React Router loaders backed by Prisma, so the page is server-rendered on first hit and client-navigated thereafter.
+
+**CNC machine integration.** A TigerStop saw on the production floor is controlled directly from the browser. A Windows executable bridges the gap between the web and the serial port. The Node.js server routes cut commands from the browser to the correct machine by matching the worker's browser IP to the active WebSocket connection — no manual machine selection required.
+
+**Document pipeline.** Signed proposals are merged with cover sheets by the PDF Merger microservice (using `pdf-lib`) and stored in Cloudflare R2. The API server proxies document requests back to R2, so the client never holds cloud credentials and storage can be swapped without touching the frontend.
+
+**Granular role-based access.** The Interweb ERP enforces over 30 discrete permissions (e.g., `viewCosts`, `editProposal`, `approveDiscount`) via Deadbolt, the Play Framework's RBAC library. Roles are composed from permission sets stored in PostgreSQL and evaluated on every request, with the frontend conditionally rendering UI based on the JWT payload.
+
+**Sales and production reporting.** Management gets charted dashboards (Recharts on the client, Play-rendered bar charts in Interweb) covering proposal pipeline, revenue by period, and production throughput. The data is queried directly from SQL Server using parameterized stored procedures.
+
+---
+
+## Engineering Highlights
+
+**Scoped Context API instead of Redux.** Rather than a single global store, each major workflow — proposals, window-set editing, work orders — has its own React context provider that is scoped to the relevant route in `router.jsx`. This keeps the state surface area small, avoids prop drilling without the overhead of a global store, and makes it straightforward to reason about what data is in scope for any given page.
+
+```jsx
+// router.jsx — provider scoped to a single route subtree
+{ path: 'window-set/:id/edit', element: <WindowProvider><AddEditWindow /></WindowProvider> }
+```
+
+**Client-side PDF generation.** Proposal PDFs are rendered entirely in the browser using `@react-pdf/renderer`. The sales rep sees a live preview as they configure the order — no server request, no waiting. Only when they're ready to submit does the binary leave the browser. This removes a class of server load that would otherwise spike unpredictably during busy sales periods.
+
+**Heartbeat daemon as an event bridge.** Rather than polling Adobe Sign from the client or building a webhook receiver, a standalone Node.js process runs on a 30-second loop, checks all pending agreements, and acts on state changes — downloading signed PDFs, merging them, uploading to R2, and creating work orders. It's a simple pattern that keeps the API server stateless and the client unaware of the async process behind the scenes.
+
+**Atomic versioned deployment.** The Interweb ERP deploys by checking out a specific git tag, building with SBT, and symlinking `/var/www/interweb/deploy/active` to the new version's directory. The previous version's directory is left in place, so a rollback is a single symlink swap and a service restart — no rebuild required.
+
+**TigerStop WebSocket bridge.** The CNC integration required routing browser commands to a specific physical machine on the factory floor. The solution: a Windows executable (bundled with a JRE) opens a WebSocket connection to the Node.js server on startup. The server tracks each connection's remote IP. When a worker submits a cut command, the server looks up the WebSocket connection whose IP matches the worker's browser IP and dispatches the command over it. The saw starts cutting within a second of the button press.
+
+---
+
+## Outcome
+
+The platform replaced manual spreadsheet tracking and disconnected printouts with a system where data flows automatically from customer conversation to factory floor. Sales reps generate proposals in the field on tablets, customers sign on their phones, and work orders appear on the factory queue without any re-entry. Material cut errors that previously surfaced at installation time are now caught at the point of order entry against live inventory.
+
+---
+
+## Links
+
+- **Live app:** _(internal, not publicly accessible)_
+- **Repositories:** _(private)_
