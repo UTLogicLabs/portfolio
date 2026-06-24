@@ -70,15 +70,21 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   const db = getPrisma(cloudflare.env.portfolio_db);
   await db.contactSubmission.create({ data: { name, email, message } });
 
-  cloudflare.ctx.waitUntil(
-    cloudflare.env.EMAIL.send({
-      to: "joshua.dix@utlogiclabs.com",
-      from: { email: "contact@utlogiclabs.com", name: "Portfolio Contact Form" },
-      subject: `New message from ${name}`,
-      text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
-      html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p><p>${message}</p>`,
-    })
-  );
+  // EMAIL binding is unavailable in local dev — guard and swallow errors so a
+  // send failure never prevents the success response from reaching the user.
+  if (cloudflare.env.EMAIL) {
+    try {
+      await cloudflare.env.EMAIL.send({
+        to: "joshua.dix@utlogiclabs.com",
+        from: { email: "contact@utlogiclabs.com", name: "Portfolio Contact Form" },
+        subject: `New message from ${name}`,
+        text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
+        html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p><p>${message}</p>`,
+      });
+    } catch {
+      // best-effort — log in production via wrangler tail if needed
+    }
+  }
 
   return data<ActionData>({ success: true });
 }
