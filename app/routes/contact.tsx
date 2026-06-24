@@ -84,7 +84,8 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
 }
 
 export default function Contact() {
-  const { turnstileSiteKey } = useLoaderData<typeof loader>();
+  const loaderData = useLoaderData<typeof loader>();
+  const turnstileSiteKey = loaderData?.turnstileSiteKey ?? "";
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
