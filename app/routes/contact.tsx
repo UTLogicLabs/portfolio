@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import type { AppLoadContext } from "react-router";
@@ -48,8 +48,11 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret: turnstileSecret, response: turnstileToken }),
       });
-      const verifyData = await verifyRes.json() as { success: boolean };
+      const verifyData = await verifyRes.json() as { success: boolean; "error-codes"?: string[] };
       turnstilePassed = verifyData.success;
+      if (!verifyData.success) {
+        console.error("[turnstile] siteverify failed", verifyData["error-codes"]);
+      }
     } catch {
       turnstilePassed = true;
     }
@@ -104,6 +107,8 @@ export default function Contact() {
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const [turnstileReady, setTurnstileReady] = useState(false);
+  const turnstileRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const script = document.createElement("script");
@@ -115,6 +120,22 @@ export default function Contact() {
       document.head.removeChild(script);
     };
   }, []);
+
+  useEffect(() => {
+    (window as Record<string, unknown>).onTurnstileComplete = () => setTurnstileReady(true);
+    (window as Record<string, unknown>).onTurnstileExpired = () => setTurnstileReady(false);
+    return () => {
+      delete (window as Record<string, unknown>).onTurnstileComplete;
+      delete (window as Record<string, unknown>).onTurnstileExpired;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (actionData?.errors?.form) {
+      setTurnstileReady(false);
+      (window as { turnstile?: { reset: (el?: Element | null) => void } }).turnstile?.reset(turnstileRef.current);
+    }
+  }, [actionData?.errors?.form]);
 
   return (
     <main className="max-w-4xl mx-auto px-6 py-16 md:py-24">
@@ -207,13 +228,16 @@ export default function Contact() {
           </div>
 
           <div
+            ref={turnstileRef}
             className="cf-turnstile"
             data-sitekey={turnstileSiteKey}
+            data-callback="onTurnstileComplete"
+            data-expired-callback="onTurnstileExpired"
           />
 
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !turnstileReady}
             className="w-full bg-primary text-primary-foreground px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmitting ? "Sending…" : "Send Message"}
