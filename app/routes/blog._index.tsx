@@ -50,7 +50,7 @@ export default function BlogIndex({
             <li key={post.slug}>
               <Link
                 to={`/blog/${post.slug}`}
-                className="group block"
+                className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
               >
                 <time className="text-sm text-muted-foreground">
                   {new Date(post.date).toLocaleDateString("en-US", {
