@@ -36,21 +36,23 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   const formData = await request.formData();
 
   const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
-  let turnstilePassed = false;
-  try {
-    const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        secret: cloudflare.env.TURNSTILE_SECRET_KEY,
-        response: turnstileToken,
-      }),
-    });
-    const verifyData = await verifyRes.json() as { success: boolean };
-    turnstilePassed = verifyData.success;
-  } catch {
-    // Treat siteverify network failures as a pass so real users aren't blocked
-    turnstilePassed = true;
+  const turnstileSecret = cloudflare.env.TURNSTILE_SECRET_KEY;
+  // Skip Turnstile when no secret is configured (local dev / CI).
+  // Production always has the secret set via `wrangler secret put`.
+  let turnstilePassed = !turnstileSecret;
+  if (turnstileSecret) {
+    try {
+      const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ secret: turnstileSecret, response: turnstileToken }),
+      });
+      const verifyData = await verifyRes.json() as { success: boolean };
+      turnstilePassed = verifyData.success;
+    } catch {
+      // Network error calling siteverify — fail open to avoid blocking real users
+      turnstilePassed = true;
+    }
   }
   if (!turnstilePassed) {
     return data<ActionData>(
