@@ -37,10 +37,11 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
 
   const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
   const turnstileSecret = cloudflare.env.TURNSTILE_SECRET_KEY;
-  // Skip Turnstile when no secret is configured (local dev / CI).
-  // Production always has the secret set via `wrangler secret put`.
-  let turnstilePassed = !turnstileSecret;
-  if (turnstileSecret) {
+  // The local workerd runtime can't reliably make outbound fetch calls to
+  // siteverify, so skip verification in dev. Production always enforces it.
+  const isDev = process.env.NODE_ENV === "development";
+  let turnstilePassed = isDev || !turnstileSecret;
+  if (!isDev && turnstileSecret) {
     try {
       const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
         method: "POST",
@@ -50,7 +51,6 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
       const verifyData = await verifyRes.json() as { success: boolean };
       turnstilePassed = verifyData.success;
     } catch {
-      // Network error calling siteverify — fail open to avoid blocking real users
       turnstilePassed = true;
     }
   }
