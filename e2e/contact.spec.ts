@@ -19,6 +19,9 @@ async function mockTurnstile(page: import("@playwright/test").Page) {
               input.name = 'cf-turnstile-response';
               input.value = 'playwright-test-token';
               el.appendChild(input);
+              // Fire data-callback to unblock the submit button
+              var cb = el.dataset.callback;
+              if (cb && typeof window[cb] === 'function') window[cb]('playwright-test-token');
             });
           }
           if (document.readyState === 'loading') {
