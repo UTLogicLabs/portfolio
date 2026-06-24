@@ -156,6 +156,28 @@ describe("Contact component", () => {
     expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled();
   });
 
+  it("shows error message when Turnstile error callback fires", async () => {
+    const Stub = makeStub();
+    render(<Stub initialEntries={["/contact"]} />);
+    await screen.findByRole("button", { name: /send message/i });
+    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileError?.(); });
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/bot verification failed/i)
+    );
+  });
+
+  it("clears Turnstile error when widget subsequently completes", async () => {
+    const Stub = makeStub();
+    render(<Stub initialEntries={["/contact"]} />);
+    await screen.findByRole("button", { name: /send message/i });
+    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileError?.(); });
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    await waitFor(() =>
+      expect(screen.queryByText(/bot verification failed/i)).not.toBeInTheDocument()
+    );
+  });
+
   it("submit button becomes disabled again when Turnstile token expires", async () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);

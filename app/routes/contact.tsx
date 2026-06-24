@@ -108,6 +108,7 @@ export default function Contact() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const [turnstileReady, setTurnstileReady] = useState(false);
+  const [turnstileError, setTurnstileError] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
 
   // React-approved derived state: adjust turnstileReady during render when a
@@ -132,11 +133,14 @@ export default function Contact() {
   }, []);
 
   useEffect(() => {
-    (window as unknown as Record<string, unknown>).onTurnstileComplete = () => setTurnstileReady(true);
-    (window as unknown as Record<string, unknown>).onTurnstileExpired = () => setTurnstileReady(false);
+    const w = window as unknown as Record<string, unknown>;
+    w.onTurnstileComplete = () => { setTurnstileReady(true); setTurnstileError(null); };
+    w.onTurnstileExpired = () => setTurnstileReady(false);
+    w.onTurnstileError = () => setTurnstileError("Bot verification failed. Please refresh the page and try again.");
     return () => {
-      delete (window as unknown as Record<string, unknown>).onTurnstileComplete;
-      delete (window as unknown as Record<string, unknown>).onTurnstileExpired;
+      delete w.onTurnstileComplete;
+      delete w.onTurnstileExpired;
+      delete w.onTurnstileError;
     };
   }, []);
 
@@ -242,7 +246,13 @@ export default function Contact() {
             data-sitekey={turnstileSiteKey}
             data-callback="onTurnstileComplete"
             data-expired-callback="onTurnstileExpired"
+            data-error-callback="onTurnstileError"
           />
+          {turnstileError && (
+            <p role="alert" className="text-red-500 text-sm">
+              {turnstileError}
+            </p>
+          )}
 
           <button
             type="submit"
