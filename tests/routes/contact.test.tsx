@@ -141,6 +141,30 @@ describe("Contact component", () => {
     expect(container.querySelector(".cf-turnstile")).toHaveAttribute("data-sitekey", "test-site-key");
   });
 
+  it("submit button is disabled before Turnstile completes", async () => {
+    const Stub = makeStub();
+    render(<Stub initialEntries={["/contact"]} />);
+    const button = await screen.findByRole("button", { name: /send message/i });
+    expect(button).toBeDisabled();
+  });
+
+  it("submit button is enabled after Turnstile callback fires", async () => {
+    const Stub = makeStub();
+    render(<Stub initialEntries={["/contact"]} />);
+    await screen.findByRole("button", { name: /send message/i });
+    act(() => { (window as Record<string, unknown>).onTurnstileComplete?.(); });
+    expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled();
+  });
+
+  it("submit button becomes disabled again when Turnstile token expires", async () => {
+    const Stub = makeStub();
+    render(<Stub initialEntries={["/contact"]} />);
+    await screen.findByRole("button", { name: /send message/i });
+    act(() => { (window as Record<string, unknown>).onTurnstileComplete?.(); });
+    act(() => { (window as Record<string, unknown>).onTurnstileExpired?.(); });
+    expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
+  });
+
   it("shows validation errors returned by the action", async () => {
     const Stub = makeStub(async () => ({
       errors: { name: "Name is required.", email: undefined, message: undefined },
@@ -178,39 +202,6 @@ describe("Contact component", () => {
     );
   });
 
-  it("outer container uses max-w-4xl", async () => {
-    const Stub = makeStub();
-    const { container } = render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
-    expect(container.querySelector("main")!.className).toContain("max-w-4xl");
-  });
-
-  it("submit button is disabled before Turnstile completes", async () => {
-    const Stub = makeStub();
-    render(<Stub initialEntries={["/contact"]} />);
-    const button = await screen.findByRole("button", { name: /send message/i });
-    expect(button).toBeDisabled();
-  });
-
-  it("submit button is enabled after Turnstile callback fires", async () => {
-    const Stub = makeStub();
-    render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
-    act(() => {
-      (window as Record<string, unknown>).onTurnstileComplete?.();
-    });
-    expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled();
-  });
-
-  it("submit button becomes disabled again when Turnstile token expires", async () => {
-    const Stub = makeStub();
-    render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as Record<string, unknown>).onTurnstileComplete?.(); });
-    act(() => { (window as Record<string, unknown>).onTurnstileExpired?.(); });
-    expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
-  });
-
   it("resets Turnstile widget when bot check fails", async () => {
     const mockReset = vi.fn();
     (window as Record<string, unknown>).turnstile = { reset: mockReset };
@@ -226,5 +217,12 @@ describe("Contact component", () => {
     expect(mockReset).toHaveBeenCalled();
 
     delete (window as Record<string, unknown>).turnstile;
+  });
+
+  it("outer container uses max-w-4xl", async () => {
+    const Stub = makeStub();
+    const { container } = render(<Stub initialEntries={["/contact"]} />);
+    await screen.findByRole("button", { name: /send message/i });
+    expect(container.querySelector("main")!.className).toContain("max-w-4xl");
   });
 });
