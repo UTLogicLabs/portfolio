@@ -1,0 +1,156 @@
+---
+title: 'Authentication in 2026: JWTs, Clerk, PropelAuth & Auth0 in the Real World'
+date: '2026-06-25'
+description: 'A practical look at modern auth architecture — when to roll your own JWTs, when to reach for a managed provider, and how to pick the right tool for your use case.'
+tags: ['auth', 'jwt', 'clerk', 'propelauth', 'auth0', 'security']
+---
+
+Here's a question worth sitting with for a second: **How many of you have shipped auth you'd trust with $10M in user data?**
+
+Most of us haven't. Not because we're bad engineers — because auth is genuinely hard, and we usually underestimate it.
+
+---
+
+## Auth Is Infrastructure
+
+Developers tend to think of authentication as the login screen. It isn't. The login screen is just the front door. Behind it is a system that handles:
+
+- **Identity verification** — is this actually who they say they are?
+- **Session lifecycle** — how long does trust last, and how do you end it?
+- **RBAC** — what can this user do, and in what context?
+- **Token rotation** — how do you keep sessions secure over time?
+- **Multi-tenancy** — how do you isolate org A's users from org B's?
+- **Attack mitigation** — credential stuffing, token replay, enumeration
+
+When you treat auth as a login form, you end up retrofitting all of this later. That's when things get expensive.
+
+---
+
+## JWT Anatomy (and the Lie We Tell Ourselves)
+
+A JWT looks like this:
+
+```
+header.payload.signature
+```
+
+Three base64-encoded segments separated by dots. The header declares the algorithm. The payload carries claims — user ID, roles, expiration. The signature is a cryptographic proof that the header and payload haven't been tampered with.
+
+This is elegant. It's also where the confusion starts.
+
+### JWT Is Not an Auth System
+
+This is worth saying clearly: **JWT is a signed serialization format, not an authentication system.**
+
+A JWT tells you that someone you trusted at signing time made certain claims about a user. It does not tell you whether those claims are still true, whether the user's session is still valid, or whether the token has been revoked. That's your problem to solve.
+
+### The Real Problems
+
+Once your app scales, these become operational headaches:
+
+- **Revocation is hard.** JWTs are stateless by design — there's no central ledger. To revoke one, you need a blocklist, which reintroduces statefulness and defeats part of the point.
+- **Refresh token compromise.** If a refresh token leaks, an attacker can silently mint new access tokens. Detection is non-trivial.
+- **Key rotation complexity.** Rotating signing keys without invalidating active sessions requires JWKS endpoints, key versioning, and a grace period. Easy to get wrong.
+- **Clock drift bugs.** JWT expiration is time-based. Servers with drifted clocks reject valid tokens or accept expired ones. Fun to debug at 2am.
+
+---
+
+## Architecture Patterns
+
+There are four broad approaches to auth architecture, each with different tradeoffs:
+
+| Pattern | Control | Complexity | Best For |
+|---|---|---|---|
+| DIY JWT | High | High | Internal tools, max flexibility |
+| Managed Auth | Low | Low | Startups, fast iteration |
+| Edge Validation | Medium | Medium | Performance-critical apps |
+| Server Sessions | Medium | Medium | Traditional web apps |
+
+The right choice depends on where you are in the product lifecycle — not just what's technically elegant.
+
+---
+
+## The Options
+
+### DIY JWT
+
+Rolling your own JWT implementation gives you maximum control and maximum responsibility. You own the signing infrastructure, the key rotation schedule, the token refresh logic, the revocation strategy, and the RBAC model.
+
+The hidden cost is engineering time. Every hour you spend debugging a clock drift issue or building a JWKS endpoint is an hour you're not building product. For internal tools or teams that genuinely need this level of control, it's the right call. For most startups, it isn't.
+
+---
+
+### Clerk
+
+Clerk is frontend-native identity — it was designed to fit into the React/Next.js mental model rather than bolt on top of it. The DX is excellent: components, hooks, and middleware that just work. You get sessions, MFA, OAuth, and a beautiful hosted UI out of the box.
+
+It's a great default for startups and SaaS products where developer velocity matters and you're not yet dealing with complex enterprise identity requirements. If you're building on Next.js and you want to ship auth in a day rather than a week, Clerk is probably your answer.
+
+---
+
+### PropelAuth
+
+PropelAuth is built org-first. Where Clerk thinks in users, PropelAuth thinks in organizations — memberships, roles, invitations, and per-org settings are first-class concepts.
+
+This matters more than it sounds. As soon as you're building B2B SaaS, you'll need your RBAC to be tenant-aware. A user might be an admin in one org and a read-only member in another. Modeling that on top of a user-centric auth system is painful. PropelAuth just handles it.
+
+If you're building something where "who can do what" is a function of both the user and the org they're acting within, PropelAuth is worth a serious look.
+
+---
+
+### Auth0
+
+Auth0 is the enterprise identity platform. It supports SAML, SSO, every OAuth provider you've heard of and several you haven't, and it's deeply configurable at every layer. It's also the most operationally heavy of these options.
+
+A useful mental model: Auth0 is to identity what Kubernetes is to infrastructure. If you need it, you really need it. If you don't, it may be more complexity than the problem warrants. Enterprise customers who require SAML-based SSO with custom attribute mappings — that's Auth0's domain.
+
+---
+
+## The Tradeoffs
+
+The core tension in auth tooling is **control vs. speed**. These aren't opposites you have to choose between once — they're a spectrum you'll move along as your product matures.
+
+There's also a cost curve that surprises most teams: **auth complexity grows faster than you expect.** MAU-based pricing can cliff unexpectedly when you hit a growth spike. Enterprise features (SAML, advanced RBAC, audit logs) are often paywalled. Vendor lock-in gets real once your auth provider's data model starts influencing your own schema.
+
+This isn't a reason to avoid managed auth — the productivity gains are usually worth it — but it's worth modeling the costs at scale before committing.
+
+---
+
+## The Decision Framework
+
+Here's the version of this I'd actually use:
+
+| Use Case | Reach For |
+|---|---|
+| Side project / personal app | Clerk |
+| B2B SaaS with org/tenant model | PropelAuth |
+| Enterprise with SAML/SSO requirements | Auth0 |
+| Internal tool / full control needed | DIY JWT |
+
+When in doubt, start with managed auth. You can always migrate toward more control. Migrating away from a DIY system you've grown into is much harder.
+
+---
+
+## Where This Is Heading
+
+A few signals worth watching:
+
+**Passkeys** are the most significant change to the credential model in a generation. WebAuthn-based authentication eliminates passwords entirely — the credential is a hardware-bound keypair, and phishing a passkey is essentially impossible. Major providers are already adding support; adoption will accelerate.
+
+**Edge auth** is becoming standard. Validating tokens at the CDN edge — before a request ever reaches your origin — reduces latency and limits the blast radius of auth failures. Frameworks are starting to build this in.
+
+**Framework-native identity** is the direction. Auth is becoming part of the application platform itself rather than a layer you integrate separately. Next.js, Remix, and others are moving toward first-class session primitives.
+
+**AI bot detection** is an emerging requirement. As AI agents become more capable, distinguishing human users from automated ones becomes a meaningful auth problem rather than just a CAPTCHA concern. Expect this to become a provider feature within the next 18 months.
+
+---
+
+## The Takeaway
+
+Authentication is identity infrastructure. It's not a login form, it's not a npm package you wire up in an afternoon and forget about, and it's not a feature you retrofit after product-market fit.
+
+The good news: the tooling in 2026 is genuinely excellent. Managed providers have absorbed a lot of the hard parts. The main thing you have to do is pick the right tool for where you are — and understand the tradeoffs well enough to migrate when you outgrow it.
+
+---
+
+*This post is adapted from a talk given at [UtahJS](https://utahjs.com). The demo app referenced in the presentation is available at the repo linked below.*
