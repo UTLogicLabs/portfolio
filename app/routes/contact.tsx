@@ -26,7 +26,7 @@ type TurnstileInstance = {
       sitekey: string;
       callback: (token: string) => void;
       'expired-callback': () => void;
-      'error-callback': () => void;
+      'error-callback': (errorCode: string) => void;
     }
   ) => string;
   remove: (widgetId: string) => void;
@@ -134,8 +134,10 @@ export default function Contact() {
         sitekey: turnstileSiteKey,
         callback: () => { setTurnstileReady(true); setTurnstileError(null); },
         'expired-callback': () => setTurnstileReady(false),
-        'error-callback': () =>
-          setTurnstileError("Bot verification failed. Please refresh the page and try again."),
+        'error-callback': (errorCode: string) => {
+          console.error("[turnstile] widget error", errorCode);
+          setTurnstileError("Bot verification failed. Please refresh the page and try again.");
+        },
       });
     };
 

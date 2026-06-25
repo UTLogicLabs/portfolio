@@ -2,6 +2,9 @@ name = "portfolio"
 compatibility_date = "2025-01-01"
 main = "workers/app.ts"
 
+[vars]
+TURNSTILE_SITE_KEY = "1x00000000000000000000AA"
+
 [[d1_databases]]
 binding = "portfolio_db"
 database_name = "portfolio-db"
