@@ -9,4 +9,4 @@ try {
     `lsof -ti:${port} | xargs kill -9 2>/dev/null; fuser -k ${port}/tcp 2>/dev/null; true`,
     { shell: true, stdio: 'pipe' }
   );
-} catch (_) {}
+} catch { /* ignore */ }
