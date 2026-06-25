@@ -13,6 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "dev:e2e": "vite dev --host --port 5173 --strictPort",
+    "pretest:e2e": "node scripts/kill-port.cjs 5173",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
     "db:migrate:init": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script --output migration.sql && wrangler d1 execute portfolio-db --local --file=migration.sql && rm -f migration.sql",
