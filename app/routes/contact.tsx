@@ -19,6 +19,20 @@ interface ActionData {
   };
 }
 
+type TurnstileInstance = {
+  render: (
+    el: HTMLElement,
+    opts: {
+      sitekey: string;
+      callback: (token: string) => void;
+      'expired-callback': () => void;
+      'error-callback': (errorCode: string) => void;
+    }
+  ) => string;
+  remove: (widgetId: string) => void;
+  reset: (widgetId: string) => void;
+};
+
 type CloudflareEnv = {
   portfolio_db: D1Database;
   EMAIL: SendEmail;
@@ -110,43 +124,45 @@ export default function Contact() {
   const [turnstileReady, setTurnstileReady] = useState(false);
   const [turnstileError, setTurnstileError] = useState<string | null>(null);
   const turnstileRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | undefined>(undefined);
 
-  // React-approved derived state: adjust turnstileReady during render when a
-  // new bot-check error arrives, so we don't call setState inside an effect.
-  const [prevFormError, setPrevFormError] = useState(actionData?.errors?.form);
-  if (actionData?.errors?.form !== prevFormError) {
-    setPrevFormError(actionData?.errors?.form);
-    if (actionData?.errors?.form) {
-      setTurnstileReady(false);
+  useEffect(() => {
+    const w = window as unknown as { turnstile?: TurnstileInstance };
+    const renderWidget = () => {
+      if (!turnstileRef.current || !turnstileSiteKey) return;
+      widgetIdRef.current = w.turnstile?.render(turnstileRef.current, {
+        sitekey: turnstileSiteKey,
+        callback: () => { setTurnstileReady(true); setTurnstileError(null); },
+        'expired-callback': () => setTurnstileReady(false),
+        'error-callback': (errorCode: string) => {
+          console.error("[turnstile] widget error", errorCode);
+          setTurnstileError("Bot verification failed. Please refresh the page and try again.");
+        },
+      });
+    };
+
+    if (w.turnstile) {
+      renderWidget();
+    } else {
+      const script = document.createElement("script");
+      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+      script.async = true;
+      script.onload = renderWidget;
+      document.head.appendChild(script);
     }
-  }
 
-  useEffect(() => {
-    const script = document.createElement("script");
-    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
     return () => {
-      document.head.removeChild(script);
+      if (widgetIdRef.current !== undefined) {
+        (window as unknown as { turnstile?: TurnstileInstance }).turnstile?.remove(widgetIdRef.current);
+        widgetIdRef.current = undefined;
+      }
     };
-  }, []);
+  }, [turnstileSiteKey]);
 
   useEffect(() => {
-    const w = window as unknown as Record<string, unknown>;
-    w.onTurnstileComplete = () => { setTurnstileReady(true); setTurnstileError(null); };
-    w.onTurnstileExpired = () => setTurnstileReady(false);
-    w.onTurnstileError = () => setTurnstileError("Bot verification failed. Please refresh the page and try again.");
-    return () => {
-      delete w.onTurnstileComplete;
-      delete w.onTurnstileExpired;
-      delete w.onTurnstileError;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (actionData?.errors?.form) {
-      (window as { turnstile?: { reset: (el?: Element | null) => void } }).turnstile?.reset(turnstileRef.current);
+    if (actionData?.errors?.form && widgetIdRef.current !== undefined) {
+      (window as unknown as { turnstile?: TurnstileInstance }).turnstile?.reset(widgetIdRef.current);
+      setTurnstileReady(false);
     }
   }, [actionData?.errors?.form]);
 
@@ -244,9 +260,6 @@ export default function Contact() {
             ref={turnstileRef}
             className="cf-turnstile"
             data-sitekey={turnstileSiteKey}
-            data-callback="onTurnstileComplete"
-            data-expired-callback="onTurnstileExpired"
-            data-error-callback="onTurnstileError"
           />
           {turnstileError && (
             <p role="alert" className="text-red-500 text-sm">
