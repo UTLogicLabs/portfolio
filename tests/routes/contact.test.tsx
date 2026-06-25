@@ -113,6 +113,38 @@ describe("contact action — validation", () => {
 
 // Component tests using createRoutesStub
 describe("Contact component", () => {
+  let capturedComplete: (() => void) | undefined;
+  let capturedExpired: (() => void) | undefined;
+  let capturedError: (() => void) | undefined;
+  let mockTurnstileRemove: ReturnType<typeof vi.fn>;
+  let mockTurnstileReset: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    capturedComplete = undefined;
+    capturedExpired = undefined;
+    capturedError = undefined;
+    mockTurnstileRemove = vi.fn();
+    mockTurnstileReset = vi.fn();
+    (window as unknown as Record<string, unknown>).turnstile = {
+      render: (_el: HTMLElement, opts: {
+        callback: () => void;
+        'expired-callback': () => void;
+        'error-callback': () => void;
+      }) => {
+        capturedComplete = opts.callback;
+        capturedExpired = opts['expired-callback'];
+        capturedError = opts['error-callback'];
+        return 'widget-1';
+      },
+      remove: mockTurnstileRemove,
+      reset: mockTurnstileReset,
+    };
+  });
+
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).turnstile;
+  });
+
   function makeStub(actionFn?: () => unknown) {
     return createRoutesStub([
       {
@@ -152,7 +184,7 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    act(() => { capturedComplete?.(); });
     expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled();
   });
 
@@ -160,7 +192,7 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileError?.(); });
+    act(() => { capturedError?.(); });
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/bot verification failed/i)
     );
@@ -170,9 +202,9 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileError?.(); });
+    act(() => { capturedError?.(); });
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    act(() => { capturedComplete?.(); });
     await waitFor(() =>
       expect(screen.queryByText(/bot verification failed/i)).not.toBeInTheDocument()
     );
@@ -182,8 +214,8 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileExpired?.(); });
+    act(() => { capturedComplete?.(); });
+    act(() => { capturedExpired?.(); });
     expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
   });
 
@@ -193,7 +225,7 @@ describe("Contact component", () => {
     }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByText("Name is required.")).toBeInTheDocument()
@@ -206,7 +238,7 @@ describe("Contact component", () => {
     }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/bot check failed/i)
@@ -217,7 +249,7 @@ describe("Contact component", () => {
     const Stub = makeStub(async () => ({ success: true }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(/message sent/i)
@@ -225,20 +257,15 @@ describe("Contact component", () => {
   });
 
   it("resets Turnstile widget when bot check fails", async () => {
-    const mockReset = vi.fn();
-    (window as unknown as Record<string, unknown>).turnstile = { reset: mockReset };
-
     const Stub = makeStub(async () => ({
       errors: { form: "Bot check failed. Please try again." },
     }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { (window as unknown as Record<string, (() => void) | undefined>).onTurnstileComplete?.(); });
+    act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    expect(mockReset).toHaveBeenCalled();
-
-    delete (window as unknown as Record<string, unknown>).turnstile;
+    expect(mockTurnstileReset).toHaveBeenCalledWith('widget-1');
   });
 
   it("outer container uses max-w-4xl", async () => {
