@@ -1,34 +1,30 @@
 import { test, expect } from "@playwright/test";
 
-// Turnstile doesn't render in headless browsers without real challenge flow.
-// We intercept the script and inject a shim that immediately fills the hidden
-// field, then use Cloudflare's always-pass test secret in .dev.vars so the
-// server-side siteverify call accepts any token.
+// Turnstile doesn't render in headless browsers without a real challenge flow.
+// We intercept the script URL and return a shim that exposes window.turnstile
+// with the same API the component calls. render() fires the callback immediately
+// so turnstileReady flips to true and the submit button is enabled.
 async function mockTurnstile(page: import("@playwright/test").Page) {
   await page.route("https://challenges.cloudflare.com/turnstile/**", (route) => {
     route.fulfill({
       contentType: "application/javascript",
       body: `
         (function() {
-          function install() {
-            document.querySelectorAll('.cf-turnstile').forEach(function(el) {
-              if (el.dataset.turnstileInstalled) return;
-              el.dataset.turnstileInstalled = '1';
+          window.turnstile = {
+            render: function(el, opts) {
               var input = document.createElement('input');
               input.type = 'hidden';
               input.name = 'cf-turnstile-response';
               input.value = 'playwright-test-token';
               el.appendChild(input);
-              // Fire data-callback to unblock the submit button
-              var cb = el.dataset.callback;
-              if (cb && typeof window[cb] === 'function') window[cb]('playwright-test-token');
-            });
-          }
-          if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', install);
-          } else {
-            install();
-          }
+              if (opts && typeof opts.callback === 'function') {
+                opts.callback('playwright-test-token');
+              }
+              return 'mock-widget-id';
+            },
+            remove: function() {},
+            reset: function() {},
+          };
         })();
       `,
     });
