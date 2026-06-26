@@ -257,7 +257,7 @@ export default function Contact() {
             )}
           </div>
 
-          {turnstileSiteKey && (
+          {!!turnstileSiteKey && (
             <div
               ref={turnstileRef}
               className="cf-turnstile"
