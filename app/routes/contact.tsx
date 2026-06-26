@@ -127,9 +127,10 @@ export default function Contact() {
   const widgetIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
+    if (!turnstileSiteKey) return;
     const w = window as unknown as { turnstile?: TurnstileInstance };
     const renderWidget = () => {
-      if (!turnstileRef.current || !turnstileSiteKey) return;
+      if (!turnstileRef.current) return;
       widgetIdRef.current = w.turnstile?.render(turnstileRef.current, {
         sitekey: turnstileSiteKey,
         callback: () => { setTurnstileReady(true); setTurnstileError(null); },
@@ -256,11 +257,13 @@ export default function Contact() {
             )}
           </div>
 
-          <div
-            ref={turnstileRef}
-            className="cf-turnstile"
-            data-sitekey={turnstileSiteKey}
-          />
+          {turnstileSiteKey && (
+            <div
+              ref={turnstileRef}
+              className="cf-turnstile"
+              data-sitekey={turnstileSiteKey}
+            />
+          )}
           {turnstileError && (
             <p role="alert" className="text-red-500 text-sm">
               {turnstileError}
