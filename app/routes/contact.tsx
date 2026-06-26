@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import type { AppLoadContext } from "react-router";
+import { Turnstile } from "@marsidev/react-turnstile";
+import type { TurnstileInstance } from "@marsidev/react-turnstile";
 import { getPrisma } from "~/db.server";
 
 export const meta: MetaFunction = () => [
@@ -18,20 +20,6 @@ interface ActionData {
     form?: string;
   };
 }
-
-type TurnstileInstance = {
-  render: (
-    el: HTMLElement,
-    opts: {
-      sitekey: string;
-      callback: (token: string) => void;
-      'expired-callback': () => void;
-      'error-callback': (errorCode: string) => void;
-    }
-  ) => string;
-  remove: (widgetId: string) => void;
-  reset: (widgetId: string) => void;
-};
 
 type CloudflareEnv = {
   portfolio_db: D1Database;
@@ -123,45 +111,11 @@ export default function Contact() {
   const isSubmitting = navigation.state === "submitting";
   const [turnstileReady, setTurnstileReady] = useState(false);
   const [turnstileError, setTurnstileError] = useState<string | null>(null);
-  const turnstileRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | undefined>(undefined);
+  const turnstileRef = useRef<TurnstileInstance | undefined>(undefined);
 
   useEffect(() => {
-    const w = window as unknown as { turnstile?: TurnstileInstance };
-    const renderWidget = () => {
-      if (!turnstileRef.current || !turnstileSiteKey) return;
-      widgetIdRef.current = w.turnstile?.render(turnstileRef.current, {
-        sitekey: turnstileSiteKey,
-        callback: () => { setTurnstileReady(true); setTurnstileError(null); },
-        'expired-callback': () => setTurnstileReady(false),
-        'error-callback': (errorCode: string) => {
-          console.error("[turnstile] widget error", errorCode);
-          setTurnstileError("Bot verification failed. Please refresh the page and try again.");
-        },
-      });
-    };
-
-    if (w.turnstile) {
-      renderWidget();
-    } else {
-      const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-      script.async = true;
-      script.onload = renderWidget;
-      document.head.appendChild(script);
-    }
-
-    return () => {
-      if (widgetIdRef.current !== undefined) {
-        (window as unknown as { turnstile?: TurnstileInstance }).turnstile?.remove(widgetIdRef.current);
-        widgetIdRef.current = undefined;
-      }
-    };
-  }, [turnstileSiteKey]);
-
-  useEffect(() => {
-    if (actionData?.errors?.form && widgetIdRef.current !== undefined) {
-      (window as unknown as { turnstile?: TurnstileInstance }).turnstile?.reset(widgetIdRef.current);
+    if (actionData?.errors?.form && turnstileRef.current != null) {
+      turnstileRef.current.reset();
       setTurnstileReady(false);
     }
   }, [actionData?.errors?.form]);
@@ -256,10 +210,15 @@ export default function Contact() {
             )}
           </div>
 
-          <div
+          <Turnstile
             ref={turnstileRef}
-            className="cf-turnstile"
-            data-sitekey={turnstileSiteKey}
+            siteKey={turnstileSiteKey}
+            onSuccess={() => { setTurnstileReady(true); setTurnstileError(null); }}
+            onExpire={() => setTurnstileReady(false)}
+            onError={(code) => {
+              console.error("[turnstile] widget error", code);
+              setTurnstileError("Bot verification failed. Please refresh the page and try again.");
+            }}
           />
           {turnstileError && (
             <p role="alert" className="text-red-500 text-sm">

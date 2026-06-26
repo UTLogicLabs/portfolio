@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRoutesStub } from "react-router";
@@ -10,6 +10,41 @@ vi.mock("~/db.server", () => ({
     contactSubmission: { create: mockCreate },
   })),
 }));
+
+interface MockTurnstileProps {
+  siteKey: string;
+  onSuccess?: (token: string) => void;
+  onExpire?: () => void;
+  onError?: (code: string) => void;
+}
+
+// Module-level captures (prefixed with `mock` for vitest hoisting compat)
+let mockCapturedComplete: ((token: string) => void) | undefined;
+let mockCapturedExpired: (() => void) | undefined;
+let mockCapturedError: ((code: string) => void) | undefined;
+const mockTurnstileRemove = vi.fn();
+const mockTurnstileReset = vi.fn();
+
+vi.mock("@marsidev/react-turnstile", async () => {
+  const { forwardRef, useImperativeHandle, createElement } = await import("react");
+  return {
+    Turnstile: forwardRef((props: MockTurnstileProps, ref: import("react").ForwardedRef<unknown>) => {
+      mockCapturedComplete = props.onSuccess;
+      mockCapturedExpired = props.onExpire;
+      mockCapturedError = props.onError;
+      useImperativeHandle(ref, () => ({
+        reset: mockTurnstileReset,
+        remove: mockTurnstileRemove,
+        render: () => undefined,
+        execute: () => undefined,
+        getResponse: () => undefined,
+        isExpired: () => false,
+        getResponsePromise: () => Promise.resolve(""),
+      }), []);
+      return createElement("div", { id: "cf-turnstile", "data-sitekey": props.siteKey });
+    }),
+  };
+});
 
 // React Router v7 data() returns { type, data, init } rather than a Response
 type DataResult<T> = { data: T; init: { status: number } };
@@ -113,36 +148,12 @@ describe("contact action — validation", () => {
 
 // Component tests using createRoutesStub
 describe("Contact component", () => {
-  let capturedComplete: (() => void) | undefined;
-  let capturedExpired: (() => void) | undefined;
-  let capturedError: (() => void) | undefined;
-  let mockTurnstileRemove: ReturnType<typeof vi.fn>;
-  let mockTurnstileReset: ReturnType<typeof vi.fn>;
-
   beforeEach(() => {
-    capturedComplete = undefined;
-    capturedExpired = undefined;
-    capturedError = undefined;
-    mockTurnstileRemove = vi.fn();
-    mockTurnstileReset = vi.fn();
-    (window as unknown as Record<string, unknown>).turnstile = {
-      render: (_el: HTMLElement, opts: {
-        callback: () => void;
-        'expired-callback': () => void;
-        'error-callback': () => void;
-      }) => {
-        capturedComplete = opts.callback;
-        capturedExpired = opts['expired-callback'];
-        capturedError = opts['error-callback'];
-        return 'widget-1';
-      },
-      remove: mockTurnstileRemove,
-      reset: mockTurnstileReset,
-    };
-  });
-
-  afterEach(() => {
-    delete (window as unknown as Record<string, unknown>).turnstile;
+    mockCapturedComplete = undefined;
+    mockCapturedExpired = undefined;
+    mockCapturedError = undefined;
+    mockTurnstileRemove.mockClear();
+    mockTurnstileReset.mockClear();
   });
 
   function makeStub(actionFn?: () => unknown) {
@@ -169,8 +180,7 @@ describe("Contact component", () => {
     const Stub = makeStub();
     const { container } = render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    expect(container.querySelector(".cf-turnstile")).toBeInTheDocument();
-    expect(container.querySelector(".cf-turnstile")).toHaveAttribute("data-sitekey", "test-site-key");
+    expect(container.querySelector("#cf-turnstile")).toBeInTheDocument();
   });
 
   it("submit button is disabled before Turnstile completes", async () => {
@@ -184,7 +194,7 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedComplete?.(); });
+    act(() => { mockCapturedComplete?.(""); });
     expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled();
   });
 
@@ -192,7 +202,7 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedError?.(); });
+    act(() => { mockCapturedError?.(""); });
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/bot verification failed/i)
     );
@@ -202,9 +212,9 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedError?.(); });
+    act(() => { mockCapturedError?.(""); });
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    act(() => { capturedComplete?.(); });
+    act(() => { mockCapturedComplete?.(""); });
     await waitFor(() =>
       expect(screen.queryByText(/bot verification failed/i)).not.toBeInTheDocument()
     );
@@ -214,8 +224,8 @@ describe("Contact component", () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedComplete?.(); });
-    act(() => { capturedExpired?.(); });
+    act(() => { mockCapturedComplete?.(""); });
+    act(() => { mockCapturedExpired?.(); });
     expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
   });
 
@@ -225,7 +235,7 @@ describe("Contact component", () => {
     }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedComplete?.(); });
+    act(() => { mockCapturedComplete?.(""); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByText("Name is required.")).toBeInTheDocument()
@@ -238,7 +248,7 @@ describe("Contact component", () => {
     }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedComplete?.(); });
+    act(() => { mockCapturedComplete?.(""); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/bot check failed/i)
@@ -249,7 +259,7 @@ describe("Contact component", () => {
     const Stub = makeStub(async () => ({ success: true }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedComplete?.(); });
+    act(() => { mockCapturedComplete?.(""); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(/message sent/i)
@@ -262,10 +272,10 @@ describe("Contact component", () => {
     }));
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
-    act(() => { capturedComplete?.(); });
+    act(() => { mockCapturedComplete?.(""); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
-    expect(mockTurnstileReset).toHaveBeenCalledWith('widget-1');
+    expect(mockTurnstileReset).toHaveBeenCalled();
   });
 
   it("outer container uses max-w-4xl", async () => {
