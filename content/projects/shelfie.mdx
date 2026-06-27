@@ -1,0 +1,124 @@
+---
+title: 'Shelfie'
+description: 'A cross-platform app for cataloging physical book collections by room, bookcase, and shelf — with barcode scanning, cloud sync, and family sharing.'
+date: '2026-06-27'
+tech:
+  [
+    'React Native',
+    'Expo',
+    'TypeScript',
+    'Supabase',
+    'Expo SQLite',
+    'Clerk',
+    'EAS',
+  ]
+repo: 'https://github.com/UTLogicLabs/library-app'
+featured: true
+---
+
+## Overview
+
+Shelfie is a cross-platform mobile app for cataloging physical book collections. Users scan a book's ISBN with their phone camera to add it instantly, then assign it a location — room, bookcase, shelf — so they always know exactly where it lives. Collections can be browsed in a list or cover-grid view, searched by title or author, and shared with family members via email invite.
+
+The app runs on iOS, Android, and the web from a single TypeScript codebase built with Expo and React Native.
+
+> **Role:** Sole developer. Designed and built the full app from scratch — product concept, data model, UI, cloud infrastructure, and CI/CD pipeline.
+
+---
+
+## The Problem
+
+Book lovers accumulate collections that spread across multiple rooms, bookshelves, and storage spaces. The common question — _where did I put that?_ — has no good answer once a library grows past a single shelf.
+
+Apps like Goodreads track what you've read, but they're built around reading history and social discovery, not physical inventory. They have no concept of a room, a bookcase, or a shelf. The result is that people with serious collections either maintain their own spreadsheets or just accept that some books are effectively lost.
+
+The goal was an app that treats location as a first-class attribute of every book, makes adding new books fast enough to do standing in a bookstore, and works reliably without an internet connection.
+
+---
+
+## Architecture
+
+The app is built on Expo with two databases — a local SQLite store for offline access and a Supabase PostgreSQL database for cloud sync — sitting behind Clerk for authentication. Supabase Edge Functions handle server-side logic that shouldn't live on the client.
+
+```
+┌─────────────────────────────────────────────┐
+│          Expo / React Native App             │
+│       iOS  ·  Android  ·  Web               │
+└─────────────────────────────────────────────┘
+         ↓                    ↓
+  ┌─────────────┐     ┌──────────────────┐
+  │ Expo SQLite │     │    Supabase      │
+  │  (offline)  │ ←→  │  PostgreSQL      │
+  └─────────────┘     │  Edge Functions  │
+                      └──────────────────┘
+                               ↓
+                      ┌──────────────────┐
+                      │      Clerk       │
+                      │  Auth & Users    │
+                      └──────────────────┘
+                               ↓
+                      ┌──────────────────┐
+                      │  EAS + GitHub    │
+                      │  Actions (CI/CD) │
+                      └──────────────────┘
+```
+
+**Dual database strategy.** Expo SQLite handles reads and writes locally so the app works without connectivity. Supabase provides real-time cloud sync and serves as the source of truth across devices. This separation means the app never blocks on network availability — a deliberate choice for a tool people use while physically handling books.
+
+**Clerk for authentication.** Clerk handles email and OAuth sign-in, user sessions, and the account infrastructure required for library sharing. Choosing a managed identity platform kept authentication off the critical path and made the email-invite sharing flow straightforward to implement.
+
+**EAS for CI/CD.** Expo Application Services builds and submits iOS and Android binaries through GitHub Actions, removing the need for local Xcode or Android Studio during development.
+
+---
+
+## Tech Stack
+
+| Layer              | Technology                                  |
+| ------------------ | ------------------------------------------- |
+| **Framework**      | Expo 54 / React Native 0.81                 |
+| **Language**       | TypeScript 5.9                              |
+| **Navigation**     | Expo Router 6 (file-based)                  |
+| **Auth**           | Clerk                                       |
+| **Cloud Database** | Supabase (PostgreSQL + Edge Functions)      |
+| **Local Database** | Expo SQLite                                 |
+| **Animation**      | React Native Reanimated 4                   |
+| **Build & Deploy** | EAS (Expo Application Services)             |
+| **CI**             | GitHub Actions                              |
+
+---
+
+## Key Features
+
+**ISBN barcode scanning.** The fastest way to add a book is to scan its barcode. The camera opens, focuses on the ISBN, and the book's metadata — title, author, cover image — is pulled automatically. Typing out titles manually is the fallback, not the default.
+
+**Location hierarchy.** Every book gets assigned a location with three levels of specificity: room, bookcase, and shelf. The hierarchy is flexible — a library can be as simple as one room with one bookcase, or as detailed as every shelf in a dedicated reading room mapped out. Searching a collection can be filtered by location, so finding a book is a matter of knowing roughly where it is rather than remembering exactly.
+
+**List and cover-grid views.** Collections can be browsed in a compact list (title, author, location) or as a cover grid that makes browsing feel closer to pulling books off a shelf. Both views support live search by title, author, or ISBN.
+
+**Library sharing.** A user can invite another person by email to view their library. Shared libraries are read-only for the recipient — useful for households where one person's collection is accessible to others, or for comparing what each person owns before buying a duplicate.
+
+**Cross-platform web support.** The same React Native codebase renders in the browser via React Native Web. The web version serves as a lightweight companion for browsing a library from a desktop without reaching for a phone.
+
+---
+
+## Engineering Highlights
+
+**Offline-first as a design constraint, not an afterthought.** The decision to use Expo SQLite as the primary local store — rather than treating Supabase as the only database — shaped every data access pattern in the app. Reads never wait on the network. Writes commit locally first, then sync to Supabase. This also means the app stays functional in basements, storage units, or anywhere with poor connectivity — exactly the places people tend to dig through book boxes.
+
+**Expo Router over React Navigation.** Expo Router's file-based routing mirrors the Next.js convention — a file at `app/book/[id].tsx` is automatically the route for `/book/:id`. This makes the navigation structure legible from the directory tree and keeps deep linking straightforward without manually registering every route. For an app with a predictable hierarchy (library → location → book), it was a natural fit.
+
+**React Native Web without a separate codebase.** Supporting the web didn't require a parallel implementation. React Native Web maps RN primitives to DOM elements, so the same components that render on iOS render in Chrome. The tradeoffs — no access to native camera on web, layout quirks at wide viewports — were isolated to a handful of conditional branches rather than a separate app.
+
+**Testing at every layer.** The codebase enforces a strict testing policy: every change to `src/` requires a corresponding test in `tests/unit/`, mirroring the same directory structure. Database logic, hooks, and utility functions all have unit coverage. This discipline surfaced integration edge cases — particularly around SQLite sync state — early enough to fix them before they reached users.
+
+---
+
+## Outcome
+
+Shelfie gives book collectors a complete picture of their physical library — not just a reading log, but a live inventory of where every book lives. The offline-first design makes it fast and reliable as a daily tool: scan a book when it comes in, find a book when you need it. The sharing feature extends that usefulness to households without requiring everyone to maintain their own separate catalog.
+
+---
+
+## Links
+
+- **Repositories:** [UTLogicLabs/library-app](https://github.com/UTLogicLabs/library-app)
