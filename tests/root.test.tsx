@@ -28,7 +28,7 @@ describe("links()", () => {
 
   it("includes the Inter stylesheet", () => {
     const result = links();
-    const stylesheet = result.find((l) => l.rel === "stylesheet");
+    const stylesheet = result.find((l) => 'rel' in l && l.rel === "stylesheet");
     expect(stylesheet).toMatchObject({ rel: "stylesheet" });
     expect((stylesheet as { href: string }).href).toContain("fonts.googleapis.com");
   });
