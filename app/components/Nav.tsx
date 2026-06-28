@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
+import { Icon } from "~/components/Icon";
 
 const NAV_LINKS = [
   { to: "/projects", label: "Projects" },
@@ -24,9 +25,10 @@ export function Nav() {
       <nav className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link
           to="/"
-          className="font-semibold text-foreground hover:text-primary transition-colors"
+          aria-label="UTLogicLabs"
+          className="text-foreground hover:text-primary transition-colors"
         >
-          UTLogicLabs
+          <Icon name="UtlogiclabsLogo" width={182} height={64} />
         </Link>
 
         {/* Desktop links */}

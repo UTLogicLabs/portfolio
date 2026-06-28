@@ -1,0 +1,68 @@
+<svg width="680" height="240" viewBox="0 0 680 240" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>UTLogicLabs logo</title>
+  <desc>UTLogicLabs wordmark — UT and Labs in electric blue, Logic in teal</desc>
+
+  <style>
+    .mark-bg { fill: #0d1117; }
+    .trace { stroke: #3b82f6; stroke-width: 1.5; fill: none; }
+    .trace-dim { stroke: #1a2a4a; stroke-width: 1; fill: none; }
+    .node-outer { fill: #0d1117; stroke: #3b82f6; stroke-width: 1.5; }
+    .node-inner { fill: #3b82f6; }
+    .node-dim { fill: #1a2a4a; }
+    .wordmark-primary { font-family: 'Courier New', monospace; font-weight: 700; font-size: 42px; fill: #e6edf3; letter-spacing: -1px; }
+    .wordmark-blue { fill: #3b82f6; }
+    .wordmark-teal { fill: #00d4a0; }
+    .wordmark-sub { font-family: 'Courier New', monospace; font-weight: 400; font-size: 13px; fill: #3b82f6; letter-spacing: 4px; }
+    .bracket { fill: none; stroke: #3b82f6; stroke-width: 2; }
+  </style>
+
+  <rect x="40" y="60" width="120" height="120" rx="8" class="mark-bg" stroke="#1a2a4a" stroke-width="1"/>
+
+  <line x1="60" y1="80" x2="60" y2="100" class="trace-dim"/>
+  <line x1="60" y1="100" x2="80" y2="100" class="trace-dim"/>
+  <line x1="140" y1="160" x2="140" y2="140" class="trace-dim"/>
+  <line x1="140" y1="140" x2="120" y2="140" class="trace-dim"/>
+  <line x1="100" y1="80" x2="100" y2="60" class="trace-dim" stroke-dasharray="3 3"/>
+  <line x1="140" y1="100" x2="160" y2="100" class="trace-dim" stroke-dasharray="3 3"/>
+
+  <polyline points="60,90 60,120 80,120" class="trace"/>
+  <polyline points="100,90 100,120" class="trace"/>
+  <polyline points="100,120 120,120 120,150 140,150" class="trace"/>
+  <polyline points="140,90 140,120 120,120" class="trace"/>
+  <polyline points="60,150 80,150 80,120" class="trace"/>
+  <polyline points="80,150 100,150 100,120" class="trace"/>
+
+  <circle cx="60" cy="80" r="4" class="node-dim"/>
+  <circle cx="140" cy="160" r="4" class="node-dim"/>
+
+  <circle cx="60" cy="90" r="5" class="node-outer"/>
+  <circle cx="60" cy="90" r="2.5" class="node-inner"/>
+  <circle cx="100" cy="90" r="5" class="node-outer"/>
+  <circle cx="100" cy="90" r="2.5" class="node-inner"/>
+  <circle cx="140" cy="90" r="5" class="node-outer"/>
+  <circle cx="140" cy="90" r="2.5" class="node-inner"/>
+  <circle cx="80" cy="120" r="4" class="node-outer"/>
+  <circle cx="80" cy="120" r="2" class="node-inner"/>
+  <circle cx="100" cy="120" r="6" class="node-outer" stroke-width="2"/>
+  <circle cx="100" cy="120" r="3" class="node-inner"/>
+  <circle cx="120" cy="120" r="4" class="node-outer"/>
+  <circle cx="120" cy="120" r="2" class="node-inner"/>
+  <circle cx="60" cy="150" r="5" class="node-outer"/>
+  <circle cx="60" cy="150" r="2.5" class="node-inner"/>
+  <circle cx="80" cy="150" r="4" class="node-outer"/>
+  <circle cx="80" cy="150" r="2" class="node-inner"/>
+  <circle cx="100" cy="150" r="5" class="node-outer"/>
+  <circle cx="100" cy="150" r="2.5" class="node-inner"/>
+  <circle cx="140" cy="150" r="5" class="node-outer"/>
+  <circle cx="140" cy="150" r="2.5" class="node-inner"/>
+
+  <text x="186" y="138" class="wordmark-primary"><tspan class="wordmark-blue">UT</tspan><tspan class="wordmark-teal">Logic</tspan><tspan class="wordmark-blue">Labs</tspan></text>
+
+  <line x1="186" y1="158" x2="190" y2="158" class="bracket"/>
+  <line x1="186" y1="158" x2="186" y2="168" class="bracket"/>
+  <line x1="186" y1="168" x2="190" y2="168" class="bracket"/>
+  <text x="197" y="168" class="wordmark-sub">FULL-STACK · WEB · DEVOPS</text>
+  <line x1="508" y1="158" x2="512" y2="158" class="bracket"/>
+  <line x1="512" y1="158" x2="512" y2="168" class="bracket"/>
+  <line x1="508" y1="168" x2="512" y2="168" class="bracket"/>
+</svg>
