@@ -16,9 +16,9 @@ describe("App", () => {
 });
 
 describe("links()", () => {
-  it("returns three Google Fonts link descriptors", () => {
+  it("returns six link descriptors", () => {
     const result = links();
-    expect(result).toHaveLength(3);
+    expect(result).toHaveLength(6);
   });
 
   it("first entry preconnects to fonts.googleapis.com", () => {
@@ -26,11 +26,26 @@ describe("links()", () => {
     expect(result[0]).toMatchObject({ rel: "preconnect", href: "https://fonts.googleapis.com" });
   });
 
-  it("last entry is the Inter stylesheet", () => {
+  it("includes the Inter stylesheet", () => {
     const result = links();
-    const last = result[result.length - 1];
-    expect(last).toMatchObject({ rel: "stylesheet" });
-    expect((last as { href: string }).href).toContain("fonts.googleapis.com");
+    const stylesheet = result.find((l) => l.rel === "stylesheet");
+    expect(stylesheet).toMatchObject({ rel: "stylesheet" });
+    expect((stylesheet as { href: string }).href).toContain("fonts.googleapis.com");
+  });
+
+  it("includes favicon.ico link", () => {
+    const result = links();
+    expect(result).toContainEqual({ rel: "icon", href: "/favicon.ico", sizes: "32x32" });
+  });
+
+  it("includes SVG favicon link", () => {
+    const result = links();
+    expect(result).toContainEqual({ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" });
+  });
+
+  it("includes apple-touch-icon link", () => {
+    const result = links();
+    expect(result).toContainEqual({ rel: "apple-touch-icon", href: "/apple-touch-icon.png" });
   });
 });
 
