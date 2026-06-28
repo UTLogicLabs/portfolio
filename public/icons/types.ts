@@ -4,6 +4,10 @@ export const iconNames = [
   "ArrowRight",
   "ExternalLink",
   "Github",
+  "UtlogiclabsIcon",
+  "UtlogiclabsLogoOutlined (1)",
+  "UtlogiclabsLogoOutlined",
+  "UtlogiclabsLogo",
 ] as const
 
 export type IconName = typeof iconNames[number]

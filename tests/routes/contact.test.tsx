@@ -250,6 +250,7 @@ describe("Contact component", () => {
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
     act(() => { capturedComplete?.(); });
+    await waitFor(() => expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled());
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(/message sent/i)
