@@ -1,6 +1,7 @@
 import { data } from "react-router";
 import type { ComponentType } from "react";
 import type { Route } from "./+types/blog.$slug";
+import { readTime } from "~/utils/readTime";
 
 interface PostFrontmatter {
   title: string;
@@ -11,6 +12,7 @@ interface PostFrontmatter {
 
 interface PostModule {
   frontmatter: PostFrontmatter;
+  wordCount: number;
   default: ComponentType;
 }
 
@@ -26,6 +28,7 @@ export async function loader({ params }: { params: { slug: string } }) {
   return {
     frontmatter: resolved.frontmatter,
     slug: params.slug,
+    readTime: readTime(resolved.wordCount ?? 0),
   };
 }
 
@@ -42,7 +45,7 @@ export default function BlogPost({
 }: {
   loaderData: Awaited<ReturnType<typeof loader>>;
 }) {
-  const { frontmatter, slug } = loaderData;
+  const { frontmatter, slug, readTime: minutes } = loaderData;
 
   // Dynamically render the MDX component
   const modules = import.meta.glob<PostModule>("../../content/blog/*.mdx", {
@@ -54,13 +57,16 @@ export default function BlogPost({
   return (
     <div>
       <header className="mb-12">
-        <time className="text-sm text-muted-foreground">
-          {new Date(frontmatter.date).toLocaleDateString("en-US", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          })}
-        </time>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <time>
+            {new Date(frontmatter.date).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })}
+          </time>
+          <span>· {minutes} min read</span>
+        </div>
         <h1 className="text-4xl font-bold tracking-tight mt-2 mb-4">
           {frontmatter.title}
         </h1>

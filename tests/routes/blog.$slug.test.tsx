@@ -17,6 +17,12 @@ describe("BlogPost loader", () => {
     expect(result.frontmatter.date).toBe("2026-06-21");
     expect(typeof result.frontmatter.description).toBe("string");
   });
+
+  it("returns a numeric readTime for an existing post", async () => {
+    const result = await loader({ params: { slug: "hello-world" } });
+    expect(typeof result.readTime).toBe("number");
+    expect(result.readTime).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe("BlogPost meta", () => {
@@ -30,6 +36,7 @@ describe("BlogPost meta", () => {
       data: {
         frontmatter: { title: "Hello, World", description: "The first post.", date: "2026-06-21" },
         slug: "hello-world",
+        readTime: 1,
       },
       loaderData: undefined as never,
       params: { slug: "hello-world" },
@@ -50,6 +57,7 @@ describe("BlogPost component", () => {
       description: "The first post on this blog — why I built this site.",
     },
     slug: "hello-world",
+    readTime: 1,
   };
 
   it("renders the post h1 title", async () => {
@@ -90,5 +98,15 @@ describe("BlogPost component", () => {
     }]);
     render(<Stub initialEntries={["/blog/hello-world"]} />);
     expect(await screen.findByText(/Welcome to my corner of the internet/)).toBeInTheDocument();
+  });
+
+  it("renders read time when provided", async () => {
+    const Stub = createRoutesStub([{
+      path: "/blog/:slug",
+      Component: BlogPost,
+      loader: async () => ({ ...loaderData, readTime: 5 }),
+    }]);
+    render(<Stub initialEntries={["/blog/hello-world"]} />);
+    expect(await screen.findByText(/5 min read/)).toBeInTheDocument();
   });
 });

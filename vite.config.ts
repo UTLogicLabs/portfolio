@@ -5,6 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkGfm from "remark-gfm";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
+import { remarkWordCount } from "./app/plugins/remarkWordCount";
 import { iconsSpritesheet } from "vite-plugin-icons-spritesheet";
 import { defineConfig } from "vite";
 import { resolve } from "path";
@@ -17,7 +18,7 @@ export default defineConfig({
   },
   plugins: [
     cloudflare({ configPath: "./wrangler.dev.toml" }),
-    mdx({ remarkPlugins: [remarkFrontmatter, remarkGfm, remarkMdxFrontmatter] }),
+    mdx({ remarkPlugins: [remarkFrontmatter, remarkGfm, remarkWordCount, remarkMdxFrontmatter] }),
     reactRouter(),
     tailwindcss(),
     iconsSpritesheet({
