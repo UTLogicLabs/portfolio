@@ -1,5 +1,6 @@
 import type { MetaFunction } from "react-router";
-import { Link } from "react-router";
+import ContentCard from "~/components/ContentCard";
+import { readTime } from "~/utils/readTime";
 
 export const meta: MetaFunction = () => [
   { title: "Blog — UTLogicLabs" },
@@ -15,6 +16,7 @@ interface PostFrontmatter {
 
 interface PostModule {
   frontmatter: PostFrontmatter;
+  wordCount: number;
 }
 
 export async function loader() {
@@ -25,7 +27,7 @@ export async function loader() {
   const posts = Object.entries(modules)
     .map(([path, mod]) => {
       const slug = path.split("/").at(-1)!.replace(/\.mdx$/, "");
-      return { slug, ...mod.frontmatter };
+      return { slug, ...mod.frontmatter, readTime: readTime(mod.wordCount ?? 0) };
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -48,22 +50,13 @@ export default function BlogIndex({
         <ol className="space-y-10 list-none p-0">
           {posts.map((post) => (
             <li key={post.slug}>
-              <Link
+              <ContentCard
                 to={`/blog/${post.slug}`}
-                className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
-              >
-                <time className="text-sm text-muted-foreground">
-                  {new Date(post.date).toLocaleDateString("en-US", {
-                    year: "numeric",
-                    month: "long",
-                    day: "numeric",
-                  })}
-                </time>
-                <h2 className="text-xl font-semibold mt-1 group-hover:text-primary transition-colors">
-                  {post.title}
-                </h2>
-                <p className="text-muted-foreground mt-1">{post.description}</p>
-              </Link>
+                title={post.title}
+                description={post.description}
+                date={post.date}
+                readTime={post.readTime}
+              />
             </li>
           ))}
         </ol>

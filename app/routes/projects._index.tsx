@@ -1,5 +1,5 @@
 import type { MetaFunction } from "react-router";
-import { Link } from "react-router";
+import ContentCard from "~/components/ContentCard";
 
 export const meta: MetaFunction = () => [
   { title: "Projects — UTLogicLabs" },
@@ -51,27 +51,12 @@ export default function ProjectsIndex({
         <ul className="grid md:grid-cols-2 gap-6 list-none p-0">
           {projects.map((project) => (
             <li key={project.slug}>
-              <Link
+              <ContentCard
                 to={`/projects/${project.slug}`}
-                className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
-              >
-                <h2 className="text-lg font-semibold group-hover:text-primary transition-colors mb-2">
-                  {project.title}
-                </h2>
-                <p className="text-sm text-muted-foreground mb-4">
-                  {project.description}
-                </p>
-                <ul className="flex flex-wrap gap-2 list-none p-0">
-                  {project.tech.map((t) => (
-                    <li
-                      key={t}
-                      className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium"
-                    >
-                      {t}
-                    </li>
-                  ))}
-                </ul>
-              </Link>
+                title={project.title}
+                description={project.description}
+                tags={project.tech}
+              />
             </li>
           ))}
         </ul>

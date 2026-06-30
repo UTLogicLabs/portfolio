@@ -17,6 +17,12 @@ describe("BlogPost loader", () => {
     expect(result.frontmatter.date).toBe("2026-06-21");
     expect(typeof result.frontmatter.description).toBe("string");
   });
+
+  it("returns a numeric readTime for an existing post", async () => {
+    const result = await loader({ params: { slug: "hello-world" } });
+    expect(typeof result.readTime).toBe("number");
+    expect(result.readTime).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe("BlogPost meta", () => {
@@ -90,5 +96,15 @@ describe("BlogPost component", () => {
     }]);
     render(<Stub initialEntries={["/blog/hello-world"]} />);
     expect(await screen.findByText(/Welcome to my corner of the internet/)).toBeInTheDocument();
+  });
+
+  it("renders read time when provided", async () => {
+    const Stub = createRoutesStub([{
+      path: "/blog/:slug",
+      Component: BlogPost,
+      loader: async () => ({ ...loaderData, readTime: 5 }),
+    }]);
+    render(<Stub initialEntries={["/blog/hello-world"]} />);
+    expect(await screen.findByText(/5 min read/)).toBeInTheDocument();
   });
 });
