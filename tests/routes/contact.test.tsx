@@ -185,7 +185,7 @@ describe("Contact component", () => {
     render(<Stub initialEntries={["/contact"]} />);
     await screen.findByRole("button", { name: /send message/i });
     act(() => { capturedComplete?.(); });
-    expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled());
   });
 
   it("shows error message when Turnstile error callback fires", async () => {

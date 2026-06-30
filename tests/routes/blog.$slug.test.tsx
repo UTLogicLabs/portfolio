@@ -36,6 +36,7 @@ describe("BlogPost meta", () => {
       data: {
         frontmatter: { title: "Hello, World", description: "The first post.", date: "2026-06-21" },
         slug: "hello-world",
+        readTime: 1,
       },
       loaderData: undefined as never,
       params: { slug: "hello-world" },
@@ -56,6 +57,7 @@ describe("BlogPost component", () => {
       description: "The first post on this blog — why I built this site.",
     },
     slug: "hello-world",
+    readTime: 1,
   };
 
   it("renders the post h1 title", async () => {
