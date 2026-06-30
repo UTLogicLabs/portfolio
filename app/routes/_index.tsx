@@ -1,5 +1,6 @@
 import type { MetaFunction } from "react-router";
 import { Link } from "react-router";
+import ContentCard from "~/components/ContentCard";
 
 export const meta: MetaFunction = () => [
   { title: "UTLogicLabs" },
@@ -111,27 +112,12 @@ export default function Home({
           <ul className="grid md:grid-cols-2 gap-6 list-none p-0">
             {featuredProjects.map((project) => (
               <li key={project.slug}>
-                <Link
+                <ContentCard
                   to={`/projects/${project.slug}`}
-                  className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
-                >
-                  <h3 className="text-lg font-semibold group-hover:text-primary transition-colors mb-2">
-                    {project.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {project.description}
-                  </p>
-                  <ul className="flex flex-wrap gap-2 list-none p-0">
-                    {project.tech.map((t) => (
-                      <li
-                        key={t}
-                        className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-xs font-medium"
-                      >
-                        {t}
-                      </li>
-                    ))}
-                  </ul>
-                </Link>
+                  title={project.title}
+                  description={project.description}
+                  tags={project.tech}
+                />
               </li>
             ))}
           </ul>
@@ -144,22 +130,12 @@ export default function Home({
           <ol className="space-y-6 list-none p-0">
             {featuredPosts.map((post) => (
               <li key={post.slug}>
-                <Link
+                <ContentCard
                   to={`/blog/${post.slug}`}
-                  className="group block border border-border rounded-xl p-6 hover:border-primary transition-colors"
-                >
-                  <time className="text-sm text-muted-foreground">
-                    {new Date(post.date).toLocaleDateString("en-US", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </time>
-                  <h3 className="text-xl font-semibold mt-1 group-hover:text-primary transition-colors">
-                    {post.title}
-                  </h3>
-                  <p className="text-muted-foreground mt-1">{post.description}</p>
-                </Link>
+                  title={post.title}
+                  description={post.description}
+                  date={post.date}
+                />
               </li>
             ))}
           </ol>
