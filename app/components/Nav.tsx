@@ -25,10 +25,10 @@ export function Nav() {
       <nav className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
         <Link
           to="/"
-          aria-label="UTLogicLabs"
-          className="text-foreground hover:text-primary transition-colors"
+          className="flex items-center gap-2 text-foreground hover:text-primary transition-colors"
         >
-          <Icon name="UtlogiclabsLogo" width={182} height={64} />
+          <Icon name="UtlogiclabsIcon" size={28} />
+          <span className="font-semibold text-sm tracking-tight">UTLogicLabs</span>
         </Link>
 
         {/* Desktop links */}
