@@ -11,6 +11,15 @@ vi.mock("~/db.server", () => ({
   })),
 }));
 
+const { mockEmailSend } = vi.hoisted(() => ({
+  mockEmailSend: vi.fn().mockResolvedValue({ data: { id: "mock-id" }, error: null }),
+}));
+vi.mock("resend", () => ({
+  Resend: vi.fn(function MockResend(this: { emails: { send: typeof mockEmailSend } }) {
+    this.emails = { send: mockEmailSend };
+  }),
+}));
+
 // React Router v7 data() returns { type, data, init } rather than a Response
 type DataResult<T> = { data: T; init: { status: number } };
 
@@ -26,7 +35,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     cloudflare: {
       env: {
         portfolio_db: {} as D1Database,
-        EMAIL: { send: vi.fn().mockResolvedValue(undefined) },
+        RESEND_API_KEY: "re_test_key",
         TURNSTILE_SECRET_KEY: "test-secret",
         TURNSTILE_SITE_KEY: "test-site-key",
         ...overrides,
@@ -68,15 +77,50 @@ describe("contact action — Turnstile verification", () => {
   });
 
   it("sends email after successful DB write", async () => {
-    const mockSend = vi.fn().mockResolvedValue(undefined);
-    await callAction(VALID_FIELDS, { EMAIL: { send: mockSend } });
-    expect(mockSend).toHaveBeenCalledOnce();
-    expect(mockSend).toHaveBeenCalledWith(
+    mockEmailSend.mockClear();
+    await callAction(VALID_FIELDS);
+    expect(mockEmailSend).toHaveBeenCalledOnce();
+    expect(mockEmailSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "joshua.dix@utlogiclabs.com",
         subject: expect.stringContaining("Josh"),
       })
     );
+  });
+
+  it("escapes HTML-unsafe characters in the email body to prevent injection", async () => {
+    mockEmailSend.mockClear();
+    await callAction({
+      ...VALID_FIELDS,
+      name: "<script>alert(1)</script>",
+      message: 'Hello & <b>world</b> "quoted" message here',
+    });
+    expect(mockEmailSend).toHaveBeenCalledOnce();
+    const sentArgs = mockEmailSend.mock.calls[0][0];
+    expect(sentArgs.html).not.toContain("<script>alert(1)</script>");
+    expect(sentArgs.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(sentArgs.html).not.toContain('"quoted"');
+    expect(sentArgs.html).toContain("&quot;quoted&quot;");
+    expect(sentArgs.html).toContain("&amp;");
+  });
+
+  it("does not send email when RESEND_API_KEY is unset", async () => {
+    mockEmailSend.mockClear();
+    await callAction(VALID_FIELDS, { RESEND_API_KEY: undefined });
+    expect(mockEmailSend).not.toHaveBeenCalled();
+  });
+
+  it("logs a [resend] error when the email send fails, and still returns success", async () => {
+    mockEmailSend.mockClear();
+    mockEmailSend.mockRejectedValueOnce(new Error("send failed"));
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = (await callAction(VALID_FIELDS)) as { data: { success: boolean } };
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[resend] failed to send contact notification email",
+      expect.any(Error)
+    );
+    expect(result.data.success).toBe(true);
+    consoleErrorSpy.mockRestore();
   });
 });
 
