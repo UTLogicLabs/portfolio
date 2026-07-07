@@ -1,0 +1,139 @@
+---
+title: "Giving the Heartbeat Service a Way to Heal Itself"
+date: "2026-07-06"
+description: "Sales orders that failed Adobe Sign conversion used to be stuck forever. A daily retry job, a de-duplicated status pipeline, and a couple of bugs found along the way."
+tags: ["node", "postgres", "adobe-sign", "backend"]
+featured: false
+---
+
+The heartbeat service polls Adobe Sign every 30 seconds to move sales orders through their signature lifecycle and convert them to work orders once everyone's signed. It had a dead end, though: once an agreement landed in `ERROR` or `AUTH_ERROR`, it was excluded from every future query and just sat there. No cron, no alert, no retry — someone had to notice and fix it by hand.
+
+## The dead end
+
+`getAllAdobeSignAgreements` explicitly filters those statuses out:
+
+```js
+WHERE
+adobe_sign_status NOT IN (
+  'CONVERTING',
+  'PROPOSAL_SIGNED',
+  'SIGNED_BY_OFFICE',
+  'COMPLETED',
+  'CANCELLED',
+  'EXPIRED',
+  'ERROR',
+  'AUTH_ERROR'
+)
+```
+
+Which makes sense for the main loop — you don't want to keep hammering Adobe Sign for agreements that are done or permanently rejected. But `ERROR` isn't necessarily permanent. It usually meant the work-order conversion call to the sales app failed transiently, or Adobe Sign had a blip. There was no code path that ever looked at those rows again.
+
+## One retry job, not two copies of the logic
+
+The obvious fix is a second job that queries for errored rows and reprocesses them. The trap is copy-pasting the ~80 lines of status-resolution and conversion logic that already lived inline inside `salesOrders()`. Instead I pulled that block out into its own function:
+
+```js
+async function processSalesOrderAgreement (agreement) {
+  const { participants } = agreement
+  if (!participants) {
+    if (agreement._permissionDenied) {
+      await postgres.updateAdobeSignStatus({
+        ...agreement,
+        adobe_sign_status: 'AUTH_ERROR'
+      })
+    }
+    return
+  }
+  const statuses = participants.map((p) => p.status)
+  // ...resolve adobeSignStatus, auto-convert if signed, upload on office signature
+}
+```
+
+Now both jobs are just "fetch some agreements, run each one through `processSalesOrderAgreement`":
+
+```js
+async function retrySalesOrderErrors () {
+  if (salesOrdersRunning) {
+    log.warn(path.basename(__filename), 'Sales Order Heartbeat already running, skipping this error-retry cycle')
+    return
+  }
+  salesOrdersRunning = true
+  try {
+    const agreements = await postgres.getErroredSalesOrders()
+    const updated = await adobeSign.getAllParticipantStatuses(agreements)
+    for (const agreement of updated) {
+      await processSalesOrderAgreement(agreement)
+    }
+  } finally {
+    salesOrdersRunning = false
+  }
+}
+```
+
+It reuses the same `salesOrdersRunning` mutex as the normal cycle rather than getting its own — the retry job and the main loop both write to the same rows, so letting them race would just reintroduce the bug from a different angle. Wired up on a 24-hour interval alongside the existing 30-second heartbeats:
+
+```js
+const retryInterval = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+
+retrySalesOrderErrors()
+setInterval(retrySalesOrderErrors, retryInterval)
+```
+
+`getErroredSalesOrders` is the mirror image of the existing query — same shape, `WHERE adobe_sign_status IN ('ERROR', 'AUTH_ERROR')`, no expiration filter since these don't naturally expire on their own.
+
+## Two bugs found while I was in there
+
+**`getParticipantStatus` was swallowing failures.** It caught errors and returned `null` instead of throwing:
+
+```js
+} catch (error) {
+  log.error(path.basename(__filename), 'Error while retrieving Adobe Sign Participant Info: ', error)
+  return null
+}
+```
+
+A `null` status would silently poison whatever status resolution ran downstream instead of surfacing as a retryable failure. Now it just rethrows and lets the caller's existing error handling (which already knows how to mark agreements `AUTH_ERROR` on permission failures) deal with it.
+
+**Participant order wasn't guaranteed.** `getAllMemembersInfo` maps Adobe Sign's response onto a fixed `STATUS_CODES` array by array index:
+
+```js
+const STATUS_CODES = ['SIGNED_BY_CUSTOMER', 'SIGNED_BY_SALES_REP', 'SIGNED_BY_OFFICE']
+```
+
+That only works if participants come back in signing order. Nothing guaranteed that. Added a sort on Adobe Sign's own `order` field before the mapping:
+
+```js
+return [...participantSets]
+  .sort((a, b) => a.order - b.order)
+  .map((participant) => ({
+    id: participant.id,
+    role: participant.role,
+    status: participant.status
+  }))
+```
+
+Small change, but if Adobe Sign ever returned participants out of order, agreements would've been silently mislabeled as signed by the wrong party.
+
+## Caching the base URI too
+
+Auth tokens were already cached for 50 minutes to avoid redundant OAuth calls, but `getAllParticipantStatuses` still called `adobeSign.getBaseUris()` fresh on every single agreement — one extra round trip per row, every cycle. Added the same TTL-cache pattern for it:
+
+```js
+async function getOrFetchBaseUri (authorization) {
+  const cached = baseUriCache.get(authorization)
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.uri
+  }
+  const uri = await adobeSign.getBaseUris(authorization)
+  baseUriCache.set(authorization, { uri, expiresAt: Date.now() + TOKEN_TTL_MS })
+  return uri
+}
+```
+
+Base URIs don't change for a given auth token, so this is free.
+
+## And a full reformat, because `npm test` was failing
+
+The repo lints with `standard`, which wants no semicolons. A chunk of the codebase had drifted from that (probably from copy-pasting snippets written elsewhere), and `npm test` was red. Rather than leave it half-consistent, I ran a full reformat across `index.js`, both service files, and `utils/`. No logic changes in that part of the diff — just removing semicolons and letting `standard --fix` normalize spacing. Tests pass again, and the errored-orders fix is layered on top of a codebase that's actually consistent.
+
+Net result: agreements that fail conversion now get one shot a day to recover on their own instead of requiring someone to notice and manually re-trigger them.
