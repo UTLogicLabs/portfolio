@@ -1,0 +1,104 @@
+---
+title: 'Webhook Inspector'
+description: 'A self-hosted webhook capture, inspection, and replay tool for debugging integrations like Stripe and GitHub.'
+date: '2026-07-07'
+tech: ['React Router', 'React', 'TypeScript', 'SQLite', 'Tailwind CSS', 'Vite', 'Vitest', 'Playwright']
+repo: 'https://github.com/UTLogicLabs/webhook-inspector'
+featured: true
+---
+
+A self-hosted alternative to webhook.site and RequestBin — spin up disposable endpoints, capture every incoming webhook request in full fidelity, and replay them on demand.
+
+---
+
+## Overview
+
+Webhook Inspector gives you a disposable URL to point real webhook senders — Stripe, GitHub, or anything else — at, then captures every request that arrives: headers, raw body, method, query string, timing, and size. Captured requests stream into the UI live, and any request can be replayed against a new target with edits to its method, headers, or body.
+
+> **Role:** Solo project — designed, built, and tested end to end.
+
+---
+
+## The Problem
+
+Debugging webhook integrations is awkward without a way to see exactly what a provider sent. Logs are often truncated or re-serialized by the time they're visible, and re-triggering a webhook to test a fix usually means generating a new real event from the provider's dashboard. There was no lightweight, self-hosted way to capture a webhook verbatim, inspect it, and resend it — without depending on an external SaaS tool.
+
+---
+
+## Architecture
+
+```
+Sender (Stripe, GitHub, ...)
+        │
+        ▼
+  POST /i/:bucketId
+        │
+        ▼
+  raw-body capture ──► SQLite (bucket + request rows)
+        │
+        ▼
+   SSE broadcast ──► live UI update
+
+  Replay:
+  UI edit (method/headers/body/target)
+        │
+        ▼
+  server-side re-fetch ──► response logged, linked to original
+        │
+        ▼
+   SSE broadcast ──► live UI update
+```
+
+- **Raw-byte capture** — incoming request bodies are stored as raw bytes rather than parsed, so the exact bytes a provider used to sign the request are preserved for later verification.
+- **SQLite storage** — buckets and captured requests are persisted with Node's built-in `node:sqlite`, so there's no external database to provision.
+- **Live streaming** — new captures and replay results are pushed to the UI over Server-Sent Events, so the request list updates in real time without polling.
+- **Server-side replay** — replays are executed from the server, not the browser, and the resulting response is stored as a new row linked back to the original capture.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | React Router 8 (SSR framework mode), React 19 |
+| Language | TypeScript |
+| Styling | Tailwind CSS 4 |
+| Storage | `node:sqlite` |
+| Real-time | Server-Sent Events |
+| Build | Vite 8 |
+| Testing | Vitest, Testing Library, happy-dom, Playwright |
+| Tooling | ESLint 9, Husky + commitlint (Conventional Commits) |
+
+---
+
+## Key Features
+
+- **Disposable endpoints** — create a bucket and get a unique `/i/:bucketId` URL ready to receive webhooks.
+- **Full, verbatim capture** — headers, raw body, method, query string, timing, and size, regardless of content type.
+- **Live streaming UI** — captured requests and replay results appear instantly via SSE.
+- **Filter & search** — narrow a bucket's requests by method, response status, or date range.
+- **Replay with edits** — modify a captured request's method, headers, body, or target URL and resend it, with the outcome logged and linked to the original.
+- **Signature verification** — verify Stripe and GitHub HMAC signatures against the exact bytes that were captured.
+- **Configurable retention** — env-var controlled body-size truncation (`MAX_BODY_BYTES`) and per-bucket request pruning (`RETENTION_LIMIT`).
+- **Docker-ready** — ships with a Dockerfile for deployment to any container platform.
+
+---
+
+## Engineering Highlights
+
+- **Hand-rolled HMAC verification** — Stripe and GitHub signature checking is implemented directly on Node's native `crypto` module, with no external crypto dependency, to keep the signing/verification logic transparent and auditable.
+- **Byte-accurate capture** — bodies are captured and stored as raw bytes before any parsing happens, which is what makes retroactive signature verification possible at all — most naive implementations re-serialize the body and silently break signature checks.
+- **Real-time without polling** — SSE was chosen over websockets or client-side polling to keep the live-update path simple: one long-lived response stream per bucket, no connection handshake overhead.
+- **Test discipline** — every change to `app/` is required to carry a corresponding unit test, enforced by a Stop hook that runs the test suite automatically; route-level behavior is additionally covered by Playwright E2E specs.
+
+---
+
+## Outcome
+
+A fully working, well-tested, self-hostable webhook debugging tool that covers the core workflow — capture, inspect, filter, verify, and replay — without relying on any external SaaS dependency or database.
+
+---
+
+## Links
+
+- **Repositories:** [webhook-inspector](https://github.com/UTLogicLabs/webhook-inspector)
