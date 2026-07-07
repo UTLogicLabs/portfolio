@@ -11,6 +11,15 @@ vi.mock("~/db.server", () => ({
   })),
 }));
 
+const { mockEmailSend } = vi.hoisted(() => ({
+  mockEmailSend: vi.fn().mockResolvedValue({ data: { id: "mock-id" }, error: null }),
+}));
+vi.mock("resend", () => ({
+  Resend: vi.fn(function MockResend(this: { emails: { send: typeof mockEmailSend } }) {
+    this.emails = { send: mockEmailSend };
+  }),
+}));
+
 // React Router v7 data() returns { type, data, init } rather than a Response
 type DataResult<T> = { data: T; init: { status: number } };
 
@@ -26,7 +35,7 @@ function makeContext(overrides: Record<string, unknown> = {}) {
     cloudflare: {
       env: {
         portfolio_db: {} as D1Database,
-        EMAIL: { send: vi.fn().mockResolvedValue(undefined) },
+        RESEND_API_KEY: "re_test_key",
         TURNSTILE_SECRET_KEY: "test-secret",
         TURNSTILE_SITE_KEY: "test-site-key",
         ...overrides,
@@ -68,10 +77,10 @@ describe("contact action — Turnstile verification", () => {
   });
 
   it("sends email after successful DB write", async () => {
-    const mockSend = vi.fn().mockResolvedValue(undefined);
-    await callAction(VALID_FIELDS, { EMAIL: { send: mockSend } });
-    expect(mockSend).toHaveBeenCalledOnce();
-    expect(mockSend).toHaveBeenCalledWith(
+    mockEmailSend.mockClear();
+    await callAction(VALID_FIELDS);
+    expect(mockEmailSend).toHaveBeenCalledOnce();
+    expect(mockEmailSend).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "joshua.dix@utlogiclabs.com",
         subject: expect.stringContaining("Josh"),

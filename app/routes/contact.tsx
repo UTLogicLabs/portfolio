@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import type { AppLoadContext } from "react-router";
+import { Resend } from "resend";
 import { getPrisma } from "~/db.server";
 
 export const meta: MetaFunction = () => [
@@ -35,7 +36,7 @@ type TurnstileInstance = {
 
 type CloudflareEnv = {
   portfolio_db: D1Database;
-  EMAIL: SendEmail;
+  RESEND_API_KEY: string;
   TURNSTILE_SECRET_KEY: string;
   TURNSTILE_SITE_KEY: string;
 };
@@ -96,13 +97,12 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   const db = getPrisma(cloudflare.env.portfolio_db);
   await db.contactSubmission.create({ data: { name, email, message } });
 
-  // EMAIL binding is unavailable in local dev — guard and swallow errors so a
-  // send failure never prevents the success response from reaching the user.
-  if (cloudflare.env.EMAIL) {
+  if (cloudflare.env.RESEND_API_KEY) {
     try {
-      await cloudflare.env.EMAIL.send({
+      const resend = new Resend(cloudflare.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: "Portfolio Contact Form <contact@utlogiclabs.com>",
         to: "joshua.dix@utlogiclabs.com",
-        from: { email: "contact@utlogiclabs.com", name: "Portfolio Contact Form" },
         subject: `New message from ${name}`,
         text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
         html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p><p>${message}</p>`,
