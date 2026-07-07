@@ -87,6 +87,41 @@ describe("contact action — Turnstile verification", () => {
       })
     );
   });
+
+  it("escapes HTML-unsafe characters in the email body to prevent injection", async () => {
+    mockEmailSend.mockClear();
+    await callAction({
+      ...VALID_FIELDS,
+      name: "<script>alert(1)</script>",
+      message: 'Hello & <b>world</b> "quoted" message here',
+    });
+    expect(mockEmailSend).toHaveBeenCalledOnce();
+    const sentArgs = mockEmailSend.mock.calls[0][0];
+    expect(sentArgs.html).not.toContain("<script>alert(1)</script>");
+    expect(sentArgs.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(sentArgs.html).not.toContain('"quoted"');
+    expect(sentArgs.html).toContain("&quot;quoted&quot;");
+    expect(sentArgs.html).toContain("&amp;");
+  });
+
+  it("does not send email when RESEND_API_KEY is unset", async () => {
+    mockEmailSend.mockClear();
+    await callAction(VALID_FIELDS, { RESEND_API_KEY: undefined });
+    expect(mockEmailSend).not.toHaveBeenCalled();
+  });
+
+  it("logs a [resend] error when the email send fails, and still returns success", async () => {
+    mockEmailSend.mockClear();
+    mockEmailSend.mockRejectedValueOnce(new Error("send failed"));
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const result = (await callAction(VALID_FIELDS)) as { data: { success: boolean } };
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[resend] failed to send contact notification email",
+      expect.any(Error)
+    );
+    expect(result.data.success).toBe(true);
+    consoleErrorSpy.mockRestore();
+  });
 });
 
 describe("contact action — validation", () => {

@@ -36,10 +36,19 @@ type TurnstileInstance = {
 
 type CloudflareEnv = {
   portfolio_db: D1Database;
-  RESEND_API_KEY: string;
-  TURNSTILE_SECRET_KEY: string;
+  RESEND_API_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY: string;
 };
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 export async function loader({ context }: LoaderFunctionArgs) {
   const { cloudflare } = context as { cloudflare: { env: CloudflareEnv } };
@@ -100,15 +109,18 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   if (cloudflare.env.RESEND_API_KEY) {
     try {
       const resend = new Resend(cloudflare.env.RESEND_API_KEY);
+      const safeName = escapeHtml(name);
+      const safeEmail = escapeHtml(email);
+      const safeMessage = escapeHtml(message);
       await resend.emails.send({
         from: "Portfolio Contact Form <contact@utlogiclabs.com>",
         to: "joshua.dix@utlogiclabs.com",
         subject: `New message from ${name}`,
         text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
-        html: `<p><strong>Name:</strong> ${name}</p><p><strong>Email:</strong> <a href="mailto:${email}">${email}</a></p><p>${message}</p>`,
+        html: `<p><strong>Name:</strong> ${safeName}</p><p><strong>Email:</strong> <a href="mailto:${safeEmail}">${safeEmail}</a></p><p>${safeMessage}</p>`,
       });
-    } catch {
-      // best-effort — log in production via wrangler tail if needed
+    } catch (err) {
+      console.error("[resend] failed to send contact notification email", err);
     }
   }
 
