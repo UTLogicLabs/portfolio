@@ -17,9 +17,9 @@
     "pretest:e2e": "node scripts/kill-port.cjs 5173",
     "test:e2e": "playwright test",
     "db:generate": "prisma generate",
-    "db:migrate:init": "prisma migrate diff --from-empty --to-schema prisma/schema.prisma --script --output migration.sql && wrangler d1 execute portfolio-db --local --file=migration.sql && rm -f migration.sql",
-    "db:migrate:local": "node scripts/migrate.js",
-    "db:migrate:remote": "node scripts/migrate.js --remote",
+    "db:migrate:new": "node scripts/migrate.js",
+    "db:migrate:apply:local": "wrangler d1 migrations apply portfolio-db --local",
+    "db:migrate:apply:remote": "wrangler d1 migrations apply portfolio-db --remote",
     "prepare": "husky"
   },
   "repository": {

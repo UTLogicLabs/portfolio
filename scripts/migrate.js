@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 /**
- * Runs `prisma migrate diff` and applies the SQL to D1 only when there are
- * actual changes. Wrangler rejects empty/comment-only SQL files, so we check
- * the diff's exit code (0 = empty, 2 = has changes, 1 = error) before
- * invoking wrangler.
+ * Diffs the local D1 database against prisma/schema.prisma and, if there are
+ * changes, writes them into a new numbered file under migrations/ (Wrangler's
+ * migration format) and applies it locally. Remote D1 is never diffed
+ * directly — Prisma has no way to introspect it, so drift can only be
+ * detected against the local D1 file. Production is kept in sync by
+ * committing the generated migration file and running
+ * `wrangler d1 migrations apply --remote` in CI (see db:migrate:apply:remote).
  *
  * Usage:
- *   node scripts/migrate.js          # apply to local D1
- *   node scripts/migrate.js --remote # apply to remote D1
+ *   node scripts/migrate.js <migration-name>
  */
 
 import { spawnSync } from "node:child_process";
-import { unlinkSync, existsSync } from "node:fs";
+import { unlinkSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 
-const remote = process.argv.includes("--remote");
-const target = remote ? "remote D1" : "local D1";
+const name = process.argv[2];
+if (!name) {
+  console.error("Usage: node scripts/migrate.js <migration-name>");
+  process.exit(1);
+}
 
 const diffResult = spawnSync(
   "npx",
@@ -34,7 +39,7 @@ const diffResult = spawnSync(
 );
 
 if (diffResult.status === 0) {
-  console.log(`✓ ${target} schema is already up to date — nothing to apply.`);
+  console.log("✓ local D1 schema is already up to date — nothing to generate.");
   if (existsSync("migration.sql")) unlinkSync("migration.sql");
   process.exit(0);
 }
@@ -45,19 +50,34 @@ if (diffResult.status !== 2) {
   process.exit(diffResult.status ?? 1);
 }
 
-// Exit code 2 = non-empty diff — apply it.
-const wranglerArgs = [
-  "d1",
-  "execute",
-  "portfolio-db",
-  "--file=migration.sql",
-];
-if (!remote) wranglerArgs.push("--local");
+const createResult = spawnSync(
+  "npx",
+  ["wrangler", "d1", "migrations", "create", "portfolio-db", name],
+  { stdio: "pipe", encoding: "utf8" }
+);
+process.stdout.write(createResult.stdout ?? "");
+process.stderr.write(createResult.stderr ?? "");
 
-const applyResult = spawnSync("npx", ["wrangler", ...wranglerArgs], {
-  stdio: "inherit",
-});
+const combinedOutput = `${createResult.stdout ?? ""}\n${createResult.stderr ?? ""}`;
+const match = combinedOutput.match(/([^\s"']*migrations[/\\]\d+_[^\s"']+\.sql)/);
+const migrationPath = match?.[1]?.trim();
+if (createResult.status !== 0 || !migrationPath) {
+  console.error("✘ failed to create a new migration file.");
+  if (existsSync("migration.sql")) unlinkSync("migration.sql");
+  process.exit(createResult.status ?? 1);
+}
 
-if (existsSync("migration.sql")) unlinkSync("migration.sql");
+const header = readFileSync(migrationPath, "utf8");
+const diffSql = readFileSync("migration.sql", "utf8");
+writeFileSync(migrationPath, `${header}${diffSql}`);
+unlinkSync("migration.sql");
+
+console.log(`✓ wrote ${migrationPath}`);
+
+const applyResult = spawnSync(
+  "npx",
+  ["wrangler", "d1", "migrations", "apply", "portfolio-db", "--local"],
+  { stdio: "inherit" }
+);
 
 process.exit(applyResult.status ?? 0);

@@ -45,5 +45,5 @@ e2e/
 ## Consequences
 
 - Vitest cannot run Cloudflare Workers runtime code directly (no D1 in jsdom). Route actions that touch D1 are tested by mocking the `context` argument with a duck-typed object.
-- E2E tests for the contact form require a running dev server with a local D1 database initialized. The CI workflow runs `db:migrate:local` before starting the server.
+- E2E tests for the contact form require a running dev server with a local D1 database initialized. The CI workflow runs `db:migrate:apply:local` before starting the server.
 - New routes or components must include tests before merging — enforced by code review, not tooling.
