@@ -10,7 +10,7 @@ export function getSessionStorage(env: CloudflareEnv) {
     cookie: {
       name: "__session",
       secrets: [env.SESSION_SECRET ?? ""],
-      secure: true,
+      secure: env.ENVIRONMENT !== "development",
       httpOnly: true,
       sameSite: "lax",
       path: "/",

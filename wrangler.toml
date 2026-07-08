@@ -4,6 +4,7 @@ main = "workers/app.ts"
 
 [vars]
 TURNSTILE_SITE_KEY = "0x4AAAAAADqc7R9L4pH0o4op"
+SITE_URL = "https://utlogiclabs.com"
 
 [assets]
 directory = "./dist/client"

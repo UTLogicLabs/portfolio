@@ -28,11 +28,18 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   const intent = String(formData.get("intent") ?? "");
   const commentId = String(formData.get("commentId") ?? "");
 
+  if (intent !== "approve" && intent !== "reject") {
+    return data({ error: "Invalid intent." }, { status: 400 });
+  }
+  if (!commentId) {
+    return data({ error: "Missing commentId." }, { status: 400 });
+  }
+
   const db = getPrisma(cloudflare.env.portfolio_db);
 
   if (intent === "approve") {
     await db.comment.update({ where: { id: commentId }, data: { approved: true } });
-  } else if (intent === "reject") {
+  } else {
     await db.comment.delete({ where: { id: commentId } });
   }
 

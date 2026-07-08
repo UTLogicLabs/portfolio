@@ -28,6 +28,10 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
     return data<ActionData>({ error: "Invalid password." }, { status: 401 });
   }
 
+  if (!cloudflare.env.SESSION_SECRET) {
+    return data<ActionData>({ error: "Server is not configured for admin login." }, { status: 500 });
+  }
+
   const { getSession, commitSession } = getSessionStorage(cloudflare.env);
   const session = await getSession(request.headers.get("Cookie"));
   session.set("role", "admin");

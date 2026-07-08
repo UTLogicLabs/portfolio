@@ -102,6 +102,52 @@ describe("admin.comments action", () => {
     await action({ request, context: makeContext() as never, params: {} } as never);
     expect(mockDelete).toHaveBeenCalledWith({ where: { id: "1" } });
   });
+
+  it("returns 400 for an unknown intent and does not touch the DB", async () => {
+    const formData = new FormData();
+    formData.set("intent", "delete-everything");
+    formData.set("commentId", "1");
+    const request = await makeAuthenticatedRequest("http://localhost/admin/comments", {
+      method: "POST",
+      body: formData,
+    });
+    const result = (await action({ request, context: makeContext() as never, params: {} } as never)) as {
+      data: { error: string };
+      init: { status: number };
+    };
+    expect(result.init.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when intent is missing", async () => {
+    const formData = new FormData();
+    formData.set("commentId", "1");
+    const request = await makeAuthenticatedRequest("http://localhost/admin/comments", {
+      method: "POST",
+      body: formData,
+    });
+    const result = (await action({ request, context: makeContext() as never, params: {} } as never)) as {
+      data: { error: string };
+      init: { status: number };
+    };
+    expect(result.init.status).toBe(400);
+  });
+
+  it("returns 400 when commentId is empty", async () => {
+    const formData = new FormData();
+    formData.set("intent", "approve");
+    const request = await makeAuthenticatedRequest("http://localhost/admin/comments", {
+      method: "POST",
+      body: formData,
+    });
+    const result = (await action({ request, context: makeContext() as never, params: {} } as never)) as {
+      data: { error: string };
+      init: { status: number };
+    };
+    expect(result.init.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
 });
 
 describe("AdminComments component", () => {

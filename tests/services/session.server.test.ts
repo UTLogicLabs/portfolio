@@ -39,6 +39,22 @@ describe("session.server", () => {
     expect(tamperedSession.get("role")).toBeUndefined();
   });
 
+  it("sets the Secure attribute on the session cookie by default", async () => {
+    const { getSession, commitSession } = getSessionStorage(makeEnv());
+    const session = await getSession(null);
+    session.set("role", "admin");
+    const cookieHeader = await commitSession(session);
+    expect(cookieHeader).toContain("Secure");
+  });
+
+  it("omits the Secure attribute on the session cookie when ENVIRONMENT is development", async () => {
+    const { getSession, commitSession } = getSessionStorage(makeEnv({ ENVIRONMENT: "development" }));
+    const session = await getSession(null);
+    session.set("role", "admin");
+    const cookieHeader = await commitSession(session);
+    expect(cookieHeader).not.toContain("Secure");
+  });
+
   it("destroySession clears the session data", async () => {
     const { getSession, commitSession, destroySession } = getSessionStorage(makeEnv());
     const session = await getSession(null);

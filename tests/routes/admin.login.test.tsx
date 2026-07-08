@@ -68,6 +68,15 @@ describe("admin.login action", () => {
     expect(result.init.status).toBe(401);
   });
 
+  it("returns 500 and does not set a cookie when SESSION_SECRET is not configured", async () => {
+    const result = (await callAction(
+      { password: "correct-password" },
+      { SESSION_SECRET: undefined }
+    )) as { data: { error: string }; init: { status: number } };
+    expect(result.init.status).toBe(500);
+    expect(result.data.error).toBeTruthy();
+  });
+
   it("redirects to /admin/comments with a Set-Cookie header on correct password", async () => {
     try {
       await callAction({ password: "correct-password" });

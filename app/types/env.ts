@@ -5,4 +5,6 @@ export type CloudflareEnv = {
   TURNSTILE_SITE_KEY: string;
   ADMIN_PASSWORD?: string;
   SESSION_SECRET?: string;
+  ENVIRONMENT?: string;
+  SITE_URL?: string;
 };
