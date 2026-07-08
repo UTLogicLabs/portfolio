@@ -58,7 +58,8 @@ const createResult = spawnSync(
 process.stdout.write(createResult.stdout ?? "");
 process.stderr.write(createResult.stderr ?? "");
 
-const match = (createResult.stdout ?? "").match(/here\s+([^\n]+\.sql)/);
+const combinedOutput = `${createResult.stdout ?? ""}\n${createResult.stderr ?? ""}`;
+const match = combinedOutput.match(/([^\s"']*migrations[/\\]\d+_[^\s"']+\.sql)/);
 const migrationPath = match?.[1]?.trim();
 if (createResult.status !== 0 || !migrationPath) {
   console.error("✘ failed to create a new migration file.");

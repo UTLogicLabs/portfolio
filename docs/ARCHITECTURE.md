@@ -83,7 +83,7 @@ Migration files live in `migrations/` and are applied via Wrangler's own migrati
 1. Edit `prisma/schema.prisma`.
 2. Generate a migration file from the diff against local D1, and apply it locally:
    ```bash
-   npm run db:migrate:new <migration-name>
+   npm run db:migrate:new -- <migration-name>
    ```
 3. Commit the generated file under `migrations/`.
 4. CI applies pending migrations to production automatically on deploy (see `.github/workflows/deploy.yml`).
