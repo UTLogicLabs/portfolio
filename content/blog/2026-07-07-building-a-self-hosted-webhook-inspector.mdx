@@ -1,0 +1,163 @@
+---
+title: "Building a Self-Hosted Webhook Inspector"
+date: "2026-07-07"
+description: "A RequestBin/webhook.site clone with capture, live streaming, replay, and signature verification — and why the raw bytes matter more than the parsed body."
+tags: ["react-router", "node", "sqlite", "webhooks"]
+featured: false
+---
+
+Wanted a disposable-endpoint tool I could point Stripe or GitHub webhooks at without deploying anything — create a bucket, get a URL, watch requests land. Spent today building `webhook-inspector` end to end: capture, live streaming, replay, and HMAC signature verification, on `create-react-router` with `node:sqlite` and zero crypto dependencies.
+
+## Capturing bytes, not a parsed body
+
+The instinct with a React Router action is to call `request.json()` or `request.formData()` and store whatever comes back. That's wrong for this app specifically, because signature verification needs the *exact* bytes the sender signed — re-serializing a parsed JSON object won't round-trip identically (key order, whitespace, number formatting can all shift).
+
+So capture reads the raw stream instead:
+
+```ts
+async function capture({ request, params }: Route.LoaderArgs) {
+  const bucketId = params.bucketId;
+  const bucket = getBucket(db, bucketId);
+  if (!bucket) {
+    return new Response("Bucket not found", { status: 404 });
+  }
+
+  const url = new URL(request.url);
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  const { text, encoding, sizeBytes } = encodeBody(bytes);
+  // ...insert record, publish to SSE bus, return bucket.responseStatus
+}
+```
+
+`encodeBody` decides how to store those bytes as text in SQLite: try UTF-8, fall back to base64 for binary payloads, and flag anything over `MAX_BODY_BYTES` as `truncated` rather than silently cutting it and lying about the encoding:
+
+```ts
+export function encodeBody(bytes: Uint8Array): EncodedBody {
+  const sizeBytes = bytes.byteLength;
+  if (sizeBytes === 0) {
+    return { text: null, encoding: "empty", sizeBytes };
+  }
+
+  const truncated = sizeBytes > MAX_BODY_BYTES;
+  const slice = truncated ? bytes.subarray(0, MAX_BODY_BYTES) : bytes;
+
+  if (truncated) {
+    return {
+      text: Buffer.from(slice).toString("base64"),
+      encoding: "truncated",
+      sizeBytes,
+    };
+  }
+
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(slice);
+    return { text, encoding: "utf8", sizeBytes };
+  } catch {
+    return {
+      text: Buffer.from(slice).toString("base64"),
+      encoding: "base64",
+      sizeBytes,
+    };
+  }
+}
+```
+
+`sizeBytes` always reflects the true pre-truncation length, even when the stored text doesn't. `decodeBody` is the exact inverse — given `(text, encoding)` it hands back the original `Buffer`, which is what signature verification actually needs.
+
+## Live updates without a websocket
+
+The bucket page needed to show new requests as they land, not on a refresh. Didn't want to stand up a websocket server for something this small, so it's Server-Sent Events instead — one `EventEmitter` per bucket:
+
+```ts
+const emitters = new Map<string, EventEmitter>();
+
+function bus(bucketId: string): EventEmitter {
+  let emitter = emitters.get(bucketId);
+  if (!emitter) {
+    emitter = new EventEmitter();
+    emitter.setMaxListeners(50);
+    emitters.set(bucketId, emitter);
+  }
+  return emitter;
+}
+
+export function publish(bucketId: string, payload: SsePayload): void {
+  bus(bucketId).emit("event", payload);
+}
+```
+
+The stream route wraps that in a `ReadableStream`, with a 25-second heartbeat comment so proxies don't kill the connection for being idle, and cleans up on abort:
+
+```ts
+const heartbeat = setInterval(() => {
+  controller.enqueue(encoder.encode(`: ping\n\n`));
+}, 25000);
+
+request.signal.addEventListener("abort", () => {
+  clearInterval(heartbeat);
+  unsubscribe();
+  try {
+    controller.close();
+  } catch {
+    // stream already closed
+  }
+});
+```
+
+`capture` and `replay` both just call `publish(bucketId, { type, record })` after writing to SQLite, and every open tab watching that bucket gets the update immediately.
+
+## Verifying signatures against the bytes that were actually sent
+
+This is the part the whole raw-bytes detour was for. Stripe and GitHub both sign the raw request body with HMAC-SHA256, and both were straightforward to implement directly on `node:crypto` — no need for a signing library:
+
+```ts
+export function verifyGithubSignature(
+  secret: string,
+  rawBody: Buffer,
+  headerValue: string | null,
+): boolean {
+  if (!headerValue || !headerValue.startsWith("sha256=")) return false;
+
+  const expectedHex = createHmac("sha256", secret).update(rawBody).digest("hex");
+  const expected = Buffer.from(`sha256=${expectedHex}`, "utf8");
+  const actual = Buffer.from(headerValue, "utf8");
+
+  if (expected.length !== actual.length) return false;
+  return timingSafeEqual(expected, actual);
+}
+```
+
+Stripe's scheme signs `${timestamp}.${rawBody}` rather than the body alone, and includes a tolerance window to reject replayed-but-valid signatures:
+
+```ts
+const signedPayload = Buffer.concat([
+  Buffer.from(`${t}.`, "utf8"),
+  rawBody,
+]);
+const expectedHex = createHmac("sha256", secret)
+  .update(signedPayload)
+  .digest("hex");
+// ...timingSafeEqual on the hex-decoded buffers, then check
+const ageSeconds = Math.abs(Date.now() / 1000 - Number(t));
+if (!Number.isFinite(ageSeconds) || ageSeconds > toleranceSeconds) {
+  return { valid: false, reason: "timestamp outside tolerance" };
+}
+```
+
+Both use `timingSafeEqual` instead of `===` so comparing signatures doesn't leak timing information — small thing, but it's the difference between "looks right" and actually correct for anything touching auth. And both only work because `rawBody` is `decodeBody()` reconstructing the exact bytes captured at ingestion, not a re-stringified object.
+
+## Replay, and where it can lie to you
+
+The replay panel lets you take a captured request, edit the method/headers/body/target URL, and fire it server-side:
+
+```ts
+const resp = await fetch(targetUrl, {
+  method,
+  headers: Object.fromEntries(headers),
+  body: ["GET", "HEAD"].includes(method) ? undefined : (replayBody ?? undefined),
+});
+```
+
+Result gets stored as a new row linked back to the original via `replayedFromId`, and pushed over the same SSE bus. One thing to watch: if you replay a signed webhook after editing its body, the signature header you're replaying is now stale — it was computed against the original bytes. The tool doesn't recompute signatures on replay, so a "successful" replay against a receiver that checks signatures will actually fail there, which is correct behavior but easy to misread as a bug in the inspector.
+
+Scaffolded with `create-react-router`, storage is `node:sqlite` (no `better-sqlite3` dependency needed now that Node ships one natively), and CI runs lint, typecheck, Vitest, and a Playwright e2e suite against the built app on every push. Whole thing — capture, replay, live stream, signature verification, tests — in one sitting.
