@@ -5,10 +5,12 @@ import CommentThread from "~/components/CommentThread";
 interface CommentSectionProps {
   comments: CommentNode[];
   turnstileSiteKey: string;
-  actionData?: { success?: boolean; errors?: CommentFormErrors };
+  actionData?: { success?: boolean; errors?: CommentFormErrors; parentId?: string | null };
 }
 
 export default function CommentSection({ comments, turnstileSiteKey, actionData }: CommentSectionProps) {
+  const isRootResult = (actionData?.parentId ?? null) === null;
+
   return (
     <section className="mt-16 pt-12 border-t border-border">
       <h2 className="text-2xl font-bold tracking-tight mb-6">Comments</h2>
@@ -28,7 +30,11 @@ export default function CommentSection({ comments, turnstileSiteKey, actionData 
         </div>
       )}
 
-      <CommentForm turnstileSiteKey={turnstileSiteKey} errors={actionData?.errors} success={actionData?.success} />
+      <CommentForm
+        turnstileSiteKey={turnstileSiteKey}
+        errors={isRootResult ? actionData?.errors : undefined}
+        success={isRootResult ? actionData?.success : undefined}
+      />
     </section>
   );
 }

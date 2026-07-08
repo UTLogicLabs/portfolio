@@ -17,6 +17,7 @@ export interface SubmitCommentInput {
 }
 
 export interface SubmitCommentResult {
+  parentId: string | null;
   success?: boolean;
   errors?: {
     name?: string;
@@ -30,9 +31,11 @@ export async function submitComment(
   input: SubmitCommentInput,
   env: CloudflareEnv
 ): Promise<SubmitCommentResult> {
+  const parentId = input.parentId ?? null;
+
   const turnstilePassed = await verifyTurnstile(input.turnstileToken, env.TURNSTILE_SECRET_KEY);
   if (!turnstilePassed) {
-    return { errors: { form: "Bot check failed. Please try again." } };
+    return { parentId, errors: { form: "Bot check failed. Please try again." } };
   }
 
   const name = input.name.trim();
@@ -55,7 +58,7 @@ export async function submitComment(
   }
 
   if (Object.keys(errors).length > 0) {
-    return { errors };
+    return { parentId, errors };
   }
 
   await db.comment.create({
@@ -76,17 +79,18 @@ export async function submitComment(
       const safeName = escapeHtml(name);
       const safeBody = escapeHtml(body);
       const safeSlug = escapeHtml(input.targetSlug);
+      const siteUrl = env.SITE_URL ?? "";
       await resend.emails.send({
         from: "Portfolio Comments <contact@utlogiclabs.com>",
         to: "joshua.dix@utlogiclabs.com",
         subject: `New comment from ${name} on ${targetLabel} "${input.targetSlug}"`,
-        text: `Name: ${name}\nEmail: ${email}\nTarget: ${input.targetType} / ${input.targetSlug}\n\n${body}\n\nReview at /admin/comments`,
-        html: `<p><strong>Name:</strong> ${safeName}</p><p><strong>Target:</strong> ${targetLabel} "${safeSlug}"</p><p>${safeBody}</p><p><a href="/admin/comments">Review pending comments</a></p>`,
+        text: `Name: ${name}\nEmail: ${email}\nTarget: ${input.targetType} / ${input.targetSlug}\n\n${body}\n\nReview at ${siteUrl}/admin/comments`,
+        html: `<p><strong>Name:</strong> ${safeName}</p><p><strong>Target:</strong> ${targetLabel} "${safeSlug}"</p><p>${safeBody}</p><p><a href="${siteUrl}/admin/comments">Review pending comments</a></p>`,
       });
     } catch (err) {
       console.error("[resend] failed to send comment notification email", err);
     }
   }
 
-  return { success: true };
+  return { parentId, success: true };
 }

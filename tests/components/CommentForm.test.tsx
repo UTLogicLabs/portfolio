@@ -74,6 +74,13 @@ describe("CommentForm", () => {
     await waitFor(() => expect(button).not.toBeDisabled());
   });
 
+  it("submit button is enabled immediately when no turnstileSiteKey is configured", async () => {
+    const Stub = makeStub({ turnstileSiteKey: "" });
+    render(<Stub initialEntries={["/post"]} />);
+    const button = await screen.findByRole("button", { name: /post comment/i });
+    expect(button).not.toBeDisabled();
+  });
+
   it("shows field-level validation errors from props", async () => {
     installTurnstile();
     const Stub = makeStub({ errors: { name: "Name is required." } });

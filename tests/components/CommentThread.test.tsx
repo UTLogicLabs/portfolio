@@ -21,11 +21,16 @@ function makeNode(overrides: Partial<CommentNode> = {}): CommentNode {
   };
 }
 
-function renderThread(comment: CommentNode) {
+function renderThread(
+  comment: CommentNode,
+  actionData?: { success?: boolean; errors?: { form?: string }; parentId?: string | null }
+) {
   const Stub = createRoutesStub([
     {
       path: "/post",
-      Component: () => <CommentThread comment={comment} turnstileSiteKey="test-site-key" />,
+      Component: () => (
+        <CommentThread comment={comment} turnstileSiteKey="test-site-key" actionData={actionData} />
+      ),
     },
   ]);
   return render(<Stub initialEntries={["/post"]} />);
@@ -61,5 +66,17 @@ describe("CommentThread", () => {
     await userEvent.click(await screen.findByRole("button", { name: /reply/i }));
     await userEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(screen.queryByRole("button", { name: /post reply/i })).not.toBeInTheDocument();
+  });
+
+  it("shows success message only on the reply form matching parentId", async () => {
+    renderThread(makeNode({ id: "1" }), { success: true, parentId: "1" });
+    await userEvent.click(await screen.findByRole("button", { name: /reply/i }));
+    expect(await screen.findByRole("status")).toHaveTextContent(/awaiting approval/i);
+  });
+
+  it("does not show success on a reply form when actionData targets a different comment", async () => {
+    renderThread(makeNode({ id: "1" }), { success: true, parentId: "other-id" });
+    await userEvent.click(await screen.findByRole("button", { name: /reply/i }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });

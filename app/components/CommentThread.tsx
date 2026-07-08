@@ -5,11 +5,12 @@ import CommentForm, { type CommentFormErrors } from "~/components/CommentForm";
 interface CommentThreadProps {
   comment: CommentNode;
   turnstileSiteKey: string;
-  actionData?: { success?: boolean; errors?: CommentFormErrors };
+  actionData?: { success?: boolean; errors?: CommentFormErrors; parentId?: string | null };
 }
 
 export default function CommentThread({ comment, turnstileSiteKey, actionData }: CommentThreadProps) {
   const [replyOpen, setReplyOpen] = useState(false);
+  const isThisReplyResult = actionData?.parentId === comment.id;
 
   return (
     <div className="border border-border rounded-xl p-4">
@@ -38,8 +39,8 @@ export default function CommentThread({ comment, turnstileSiteKey, actionData }:
           <CommentForm
             turnstileSiteKey={turnstileSiteKey}
             parentId={comment.id}
-            errors={actionData?.errors}
-            success={actionData?.success}
+            errors={isThisReplyResult ? actionData?.errors : undefined}
+            success={isThisReplyResult ? actionData?.success : undefined}
             submitLabel="Post Reply"
           />
         </div>

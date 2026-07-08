@@ -25,6 +25,7 @@ function makeEnv(overrides: Partial<CloudflareEnv> = {}): CloudflareEnv {
     RESEND_API_KEY: "re_test_key",
     TURNSTILE_SECRET_KEY: "test-secret",
     TURNSTILE_SITE_KEY: "test-site-key",
+    SITE_URL: "https://utlogiclabs.com",
     ...overrides,
   };
 }
@@ -56,6 +57,14 @@ describe("submitComment — Turnstile", () => {
     expect(result.errors?.form).toBeTruthy();
     expect(mockCreate).not.toHaveBeenCalled();
   });
+
+  it("includes the submitted parentId in the result even when Turnstile verification fails", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce({
+      json: () => Promise.resolve({ success: false }),
+    } as Response);
+    const result = await submitComment({ ...VALID_INPUT, parentId: "parent-1" }, makeEnv());
+    expect(result.parentId).toBe("parent-1");
+  });
 });
 
 describe("submitComment — validation", () => {
@@ -73,6 +82,11 @@ describe("submitComment — validation", () => {
     expect(result.errors?.name).toBeTruthy();
   });
 
+  it("includes parentId: null in the result for a top-level validation error", async () => {
+    const result = await submitComment({ ...VALID_INPUT, name: "" }, makeEnv());
+    expect(result.parentId).toBeNull();
+  });
+
   it("returns an error when email is invalid", async () => {
     const result = await submitComment({ ...VALID_INPUT, email: "not-an-email" }, makeEnv());
     expect(result.errors?.email).toBeTruthy();
@@ -86,6 +100,7 @@ describe("submitComment — validation", () => {
   it("creates the comment as unapproved on valid input", async () => {
     const result = await submitComment(VALID_INPUT, makeEnv());
     expect(result.success).toBe(true);
+    expect(result.parentId).toBeNull();
     expect(mockCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({
         targetType: "BLOG_POST",
@@ -124,6 +139,7 @@ describe("submitComment — validation", () => {
     });
     const result = await submitComment({ ...VALID_INPUT, parentId: "parent-1" }, makeEnv());
     expect(result.success).toBe(true);
+    expect(result.parentId).toBe("parent-1");
     expect(mockCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ parentId: "parent-1" }),
     });
@@ -159,6 +175,20 @@ describe("submitComment — notification email", () => {
     const sentArgs = mockEmailSend.mock.calls[0][0];
     expect(sentArgs.html).not.toContain("<script>alert(1)</script>");
     expect(sentArgs.html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+  });
+
+  it("builds an absolute admin review link using SITE_URL", async () => {
+    await submitComment(VALID_INPUT, makeEnv());
+    const sentArgs = mockEmailSend.mock.calls[0][0];
+    expect(sentArgs.text).toContain("https://utlogiclabs.com/admin/comments");
+    expect(sentArgs.html).toContain('href="https://utlogiclabs.com/admin/comments"');
+  });
+
+  it("falls back to a relative link when SITE_URL is unset", async () => {
+    await submitComment(VALID_INPUT, makeEnv({ SITE_URL: undefined }));
+    const sentArgs = mockEmailSend.mock.calls[0][0];
+    expect(sentArgs.text).toContain("Review at /admin/comments");
+    expect(sentArgs.html).toContain('href="/admin/comments"');
   });
 
   it("does not send an email when RESEND_API_KEY is unset", async () => {

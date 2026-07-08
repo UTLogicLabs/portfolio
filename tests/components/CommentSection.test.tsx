@@ -20,11 +20,20 @@ function makeNode(overrides: Partial<CommentNode> = {}): CommentNode {
   };
 }
 
-function renderSection(comments: CommentNode[]) {
+function renderSection(
+  comments: CommentNode[],
+  actionData?: { success?: boolean; errors?: { form?: string }; parentId?: string | null }
+) {
   const Stub = createRoutesStub([
     {
       path: "/post",
-      Component: () => <CommentSection comments={comments} turnstileSiteKey="test-site-key" />,
+      Component: () => (
+        <CommentSection
+          comments={comments}
+          turnstileSiteKey="test-site-key"
+          actionData={actionData}
+        />
+      ),
     },
   ]);
   return render(<Stub initialEntries={["/post"]} />);
@@ -46,5 +55,16 @@ describe("CommentSection", () => {
     renderSection([]);
     expect(await screen.findByLabelText(/name/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /post comment/i })).toBeInTheDocument();
+  });
+
+  it("shows errors on the root form when actionData.parentId is null", async () => {
+    renderSection([], { errors: { form: "Bot check failed." }, parentId: null });
+    expect(await screen.findByRole("alert")).toHaveTextContent(/bot check failed/i);
+  });
+
+  it("does not show errors on the root form when actionData targets a reply", async () => {
+    renderSection([], { errors: { form: "Bot check failed." }, parentId: "some-comment-id" });
+    await screen.findByLabelText(/name/i);
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });

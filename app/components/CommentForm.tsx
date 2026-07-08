@@ -28,7 +28,7 @@ export default function CommentForm({
 }: CommentFormProps) {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const { turnstileRef, turnstileReady, turnstileError, resetTurnstile } = useTurnstile(turnstileSiteKey);
+  const { turnstileRef, turnstileReady, turnstileRequired, turnstileError, resetTurnstile } = useTurnstile(turnstileSiteKey);
   const formRef = useRef<HTMLFormElement>(null);
   const prevNavigationState = useRef(navigation.state);
   const fieldId = parentId ?? "root";
@@ -136,7 +136,7 @@ export default function CommentForm({
 
       <button
         type="submit"
-        disabled={isSubmitting || !turnstileReady}
+        disabled={isSubmitting || (turnstileRequired && !turnstileReady)}
         className="bg-primary text-primary-foreground px-5 py-2.5 rounded-lg font-medium hover:opacity-90 transition-opacity disabled:opacity-60 disabled:cursor-not-allowed"
       >
         {isSubmitting ? "Posting…" : submitLabel}

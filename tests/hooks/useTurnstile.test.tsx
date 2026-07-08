@@ -96,4 +96,49 @@ describe("useTurnstile", () => {
     unmount();
     expect(mockRemove).toHaveBeenCalledWith("widget-1");
   });
+
+  it("turnstileRequired is false when siteKey is empty", () => {
+    installTurnstile();
+    render(<TestComponent siteKey="" />);
+    expect(latest?.turnstileRequired).toBe(false);
+  });
+
+  it("turnstileRequired is true when siteKey is set", () => {
+    installTurnstile();
+    render(<TestComponent siteKey="site-key" />);
+    expect(latest?.turnstileRequired).toBe(true);
+  });
+});
+
+describe("useTurnstile script loading dedupe", () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).turnstile;
+    document
+      .querySelectorAll('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]')
+      .forEach((s) => s.remove());
+  });
+
+  it("injects only one script tag when two components mount concurrently", async () => {
+    vi.resetModules();
+    const { useTurnstile: freshUseTurnstile } = await import("~/hooks/useTurnstile");
+
+    function TwoWidgets() {
+      const a = freshUseTurnstile("site-key-a");
+      const b = freshUseTurnstile("site-key-b");
+      return (
+        <>
+          <div ref={a.turnstileRef} />
+          <div ref={b.turnstileRef} />
+        </>
+      );
+    }
+
+    render(<TwoWidgets />);
+
+    await waitFor(() => {
+      expect(
+        document.querySelectorAll('script[src="https://challenges.cloudflare.com/turnstile/v0/api.js"]')
+      ).toHaveLength(1);
+    });
+  });
 });
