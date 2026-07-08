@@ -42,7 +42,7 @@ jobs:
     # Set up in: GitHub → Settings → Branches → Require status checks.
     environment:
       name: production
-      url: https://portfolio.jadix117.workers.dev
+      url: https://utlogiclabs.com
 
     steps:
       - name: Checkout
@@ -68,4 +68,4 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env production
+          command: deploy
