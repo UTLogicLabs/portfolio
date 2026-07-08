@@ -1,6 +1,13 @@
-import { data } from "react-router";
+import { data, useActionData } from "react-router";
+import type { ActionFunctionArgs } from "react-router";
+import type { AppLoadContext } from "react-router";
 import type { ComponentType } from "react";
 import type { Route } from "./+types/projects.$slug";
+import { getPrisma } from "~/db.server";
+import { buildCommentTree } from "~/utils/comments";
+import { submitComment, type SubmitCommentResult } from "~/services/comments.server";
+import CommentSection from "~/components/CommentSection";
+import type { CloudflareEnv } from "~/types/env";
 
 interface ProjectFrontmatter {
   title: string;
@@ -16,7 +23,13 @@ interface ProjectModule {
   default: ComponentType;
 }
 
-export async function loader({ params }: { params: { slug: string } }) {
+export async function loader({
+  params,
+  context,
+}: {
+  params: { slug: string };
+  context?: AppLoadContext;
+}) {
   const modules = import.meta.glob<ProjectModule>("../../content/projects/*.mdx");
   const mod = modules[`../../content/projects/${params.slug}.mdx`];
 
@@ -25,7 +38,41 @@ export async function loader({ params }: { params: { slug: string } }) {
   }
 
   const resolved = await mod();
-  return { frontmatter: resolved.frontmatter, slug: params.slug };
+
+  const { cloudflare } = (context ?? {}) as { cloudflare?: { env: CloudflareEnv } };
+  let comments: ReturnType<typeof buildCommentTree> = [];
+  let turnstileSiteKey = "";
+  if (cloudflare) {
+    const db = getPrisma(cloudflare.env.portfolio_db);
+    const rows = await db.comment.findMany({
+      where: { targetType: "PROJECT", targetSlug: params.slug, approved: true },
+      orderBy: { createdAt: "asc" },
+    });
+    comments = buildCommentTree(rows);
+    turnstileSiteKey = cloudflare.env.TURNSTILE_SITE_KEY;
+  }
+
+  return { frontmatter: resolved.frontmatter, slug: params.slug, comments, turnstileSiteKey };
+}
+
+export async function action({ request, params, context }: ActionFunctionArgs & { context: AppLoadContext }) {
+  const { cloudflare } = context as { cloudflare: { env: CloudflareEnv } };
+  const formData = await request.formData();
+
+  const result = await submitComment(
+    {
+      targetType: "PROJECT",
+      targetSlug: params.slug!,
+      name: String(formData.get("name") ?? ""),
+      email: String(formData.get("email") ?? ""),
+      body: String(formData.get("body") ?? ""),
+      parentId: formData.get("parentId") ? String(formData.get("parentId")) : null,
+      turnstileToken: String(formData.get("cf-turnstile-response") ?? ""),
+    },
+    cloudflare.env
+  );
+
+  return data<SubmitCommentResult>(result, { status: result.errors ? 422 : 200 });
 }
 
 export const meta: Route.MetaFunction = ({ data: loaderData }) => {
@@ -41,7 +88,8 @@ export default function ProjectDetail({
 }: {
   loaderData: Awaited<ReturnType<typeof loader>>;
 }) {
-  const { frontmatter, slug } = loaderData;
+  const { frontmatter, slug, comments, turnstileSiteKey } = loaderData;
+  const actionData = useActionData<SubmitCommentResult>();
 
   const modules = import.meta.glob<ProjectModule>("../../content/projects/*.mdx", {
     eager: true,
@@ -94,6 +142,7 @@ export default function ProjectDetail({
       <article className="prose prose-neutral max-w-none">
         {Project && <Project />}
       </article>
+      <CommentSection comments={comments} turnstileSiteKey={turnstileSiteKey} actionData={actionData} />
     </main>
   );
 }

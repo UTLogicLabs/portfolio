@@ -1,9 +1,35 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { createRoutesStub } from "react-router";
-import BlogPost, { loader, meta } from "~/routes/blog.$slug";
+import BlogPost, { loader, action, meta } from "~/routes/blog.$slug";
+
+const mockFindMany = vi.fn();
+vi.mock("~/db.server", () => ({
+  getPrisma: vi.fn(() => ({ comment: { findMany: mockFindMany } })),
+}));
+
+const mockSubmitComment = vi.fn();
+vi.mock("~/services/comments.server", () => ({
+  submitComment: (...args: unknown[]) => mockSubmitComment(...args),
+}));
+
+function makeContext(overrides: Record<string, unknown> = {}) {
+  return {
+    cloudflare: {
+      env: {
+        portfolio_db: {} as D1Database,
+        TURNSTILE_SITE_KEY: "test-site-key",
+        ...overrides,
+      },
+    },
+  };
+}
 
 describe("BlogPost loader", () => {
+  beforeEach(() => {
+    mockFindMany.mockReset().mockResolvedValue([]);
+  });
+
   it("throws a 404 DataWithResponseInit for an unknown slug", async () => {
     await expect(
       loader({ params: { slug: "no-such-post" } })
@@ -23,6 +49,80 @@ describe("BlogPost loader", () => {
     expect(typeof result.readTime).toBe("number");
     expect(result.readTime).toBeGreaterThanOrEqual(1);
   });
+
+  it("returns empty comments and no site key when no cloudflare context is present", async () => {
+    const result = await loader({ params: { slug: "hello-world" } });
+    expect(result.comments).toEqual([]);
+    expect(result.turnstileSiteKey).toBe("");
+    expect(mockFindMany).not.toHaveBeenCalled();
+  });
+
+  it("fetches only approved comments for this post and builds a tree", async () => {
+    mockFindMany.mockResolvedValue([
+      { id: "a", parentId: null, targetType: "BLOG_POST", targetSlug: "hello-world" },
+      { id: "b", parentId: "a", targetType: "BLOG_POST", targetSlug: "hello-world" },
+    ]);
+    const result = await loader({
+      params: { slug: "hello-world" },
+      context: makeContext() as never,
+    } as never);
+    expect(mockFindMany).toHaveBeenCalledWith({
+      where: { targetType: "BLOG_POST", targetSlug: "hello-world", approved: true },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0].id).toBe("a");
+    expect(result.comments[0].replies[0].id).toBe("b");
+    expect(result.turnstileSiteKey).toBe("test-site-key");
+  });
+});
+
+describe("BlogPost action", () => {
+  beforeEach(() => {
+    mockSubmitComment.mockReset();
+  });
+
+  function callAction(fields: Record<string, string>) {
+    const formData = new FormData();
+    for (const [k, v] of Object.entries(fields)) formData.set(k, v);
+    const request = new Request("http://localhost/blog/hello-world", { method: "POST", body: formData });
+    return action({
+      request,
+      params: { slug: "hello-world" },
+      context: makeContext() as never,
+    } as never);
+  }
+
+  it("delegates to submitComment with targetType BLOG_POST and the route's slug", async () => {
+    mockSubmitComment.mockResolvedValue({ success: true });
+    await callAction({ name: "Josh", email: "josh@example.com", body: "Nice post!" });
+    expect(mockSubmitComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        targetType: "BLOG_POST",
+        targetSlug: "hello-world",
+        name: "Josh",
+        email: "josh@example.com",
+        body: "Nice post!",
+      }),
+      expect.anything()
+    );
+  });
+
+  it("returns a 200 status on success", async () => {
+    mockSubmitComment.mockResolvedValue({ success: true });
+    const result = (await callAction({ name: "Josh", email: "j@example.com", body: "Nice!" })) as {
+      init: { status: number };
+    };
+    expect(result.init.status).toBe(200);
+  });
+
+  it("returns a 422 status when submitComment reports errors", async () => {
+    mockSubmitComment.mockResolvedValue({ errors: { name: "Name is required." } });
+    const result = (await callAction({ name: "", email: "j@example.com", body: "Nice!" })) as {
+      init: { status: number };
+    };
+    expect(result.init.status).toBe(422);
+  });
 });
 
 describe("BlogPost meta", () => {
@@ -37,6 +137,8 @@ describe("BlogPost meta", () => {
         frontmatter: { title: "Hello, World", description: "The first post.", date: "2026-06-21" },
         slug: "hello-world",
         readTime: 1,
+        comments: [],
+        turnstileSiteKey: "",
       },
       loaderData: undefined as never,
       params: { slug: "hello-world" },
@@ -58,6 +160,8 @@ describe("BlogPost component", () => {
     },
     slug: "hello-world",
     readTime: 1,
+    comments: [],
+    turnstileSiteKey: "test-site-key",
   };
 
   it("renders the post h1 title", async () => {
@@ -108,5 +212,15 @@ describe("BlogPost component", () => {
     }]);
     render(<Stub initialEntries={["/blog/hello-world"]} />);
     expect(await screen.findByText(/5 min read/)).toBeInTheDocument();
+  });
+
+  it("renders the comment section", async () => {
+    const Stub = createRoutesStub([{
+      path: "/blog/:slug",
+      Component: BlogPost,
+      loader: async () => loaderData,
+    }]);
+    render(<Stub initialEntries={["/blog/hello-world"]} />);
+    expect(await screen.findByRole("heading", { level: 2, name: "Comments" })).toBeInTheDocument();
   });
 });
