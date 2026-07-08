@@ -74,25 +74,28 @@ Add new icons by dropping an SVG file into `icons/svg-icons/`. The sprite is reb
 
 ## Database
 
-Only one model exists: `ContactSubmission`. The Prisma schema is in `prisma/schema.prisma`.
+Models: `ContactSubmission` and `Comment`. The Prisma schema is in `prisma/schema.prisma`.
 
-### Local Development
+### Schema changes
 
-Wrangler emulates D1 locally in `.wrangler/state/v3/d1/`. Run migrations with:
+Migration files live in `migrations/` and are applied via Wrangler's own migration tracking (`d1_migrations` table on each database), not by diffing schema state at apply time — D1 can't be introspected remotely, so there's no reliable way to diff "current remote state" directly.
+
+1. Edit `prisma/schema.prisma`.
+2. Generate a migration file from the diff against local D1, and apply it locally:
+   ```bash
+   npm run db:migrate:new <migration-name>
+   ```
+3. Commit the generated file under `migrations/`.
+4. CI applies pending migrations to production automatically on deploy (see `.github/workflows/deploy.yml`).
+
+To manually apply pending migrations:
 
 ```bash
-npm run db:migrate:local
+npm run db:migrate:apply:local   # local D1 emulation
+npm run db:migrate:apply:remote  # production D1
 ```
 
-### Production
-
-Migrations are applied to the remote D1 database:
-
-```bash
-npm run db:migrate:remote
-```
-
-There is no `prisma migrate dev` step — Prisma's standard SQLite migration workflow does not apply to D1. Instead, `prisma migrate diff` generates SQL and Wrangler applies it.
+There is no `prisma migrate dev` step — Prisma's standard SQLite migration workflow does not apply to D1.
 
 ### Per-Request Client
 

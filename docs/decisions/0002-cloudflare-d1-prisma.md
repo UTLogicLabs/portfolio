@@ -17,7 +17,7 @@ Use **Cloudflare D1** as the database, accessed via **Prisma** with `@prisma/ada
 - Prisma provides a typed client generated from the schema, eliminating raw SQL for simple queries.
 - `@prisma/adapter-d1` bridges Prisma's query engine to D1's HTTP-based API.
 - Wrangler's local D1 emulation means development requires no external service.
-- The schema is intentionally minimal (one model: `ContactSubmission`). If the data model grows significantly, this choice should be re-evaluated.
+- The schema is intentionally minimal (`ContactSubmission`, `Comment`). If the data model grows significantly, this choice should be re-evaluated.
 
 ## Per-Request Client Pattern
 
@@ -25,13 +25,13 @@ D1 bindings are request-scoped by the Workers runtime. A module-level `PrismaCli
 
 ## Migration Workflow
 
-`prisma migrate dev` writes to a local SQLite file, which is incompatible with D1's emulation layer. The correct workflow is:
+`prisma migrate dev` writes to a local SQLite file, which is incompatible with D1's emulation layer. Prisma also has no way to introspect a remote D1 database to diff against, so migrations are generated locally and applied via Wrangler's own migration tracking rather than by diffing state at apply time:
 
-1. `prisma migrate diff` — generates SQL from schema changes
-2. `wrangler d1 execute portfolio-db --local --file=-` — applies SQL locally
-3. `wrangler d1 execute portfolio-db --file=-` — applies SQL to remote D1
+1. `prisma migrate diff` (against local D1) — generates SQL from schema changes into a new file under `migrations/`
+2. `wrangler d1 migrations apply --local` — applies pending migration files locally, tracked in a `d1_migrations` bookkeeping table
+3. `wrangler d1 migrations apply --remote` — applies the same committed migration files to production, tracked the same way
 
-This is wrapped in the `db:migrate:local` and `db:migrate:remote` npm scripts.
+This is wrapped in the `db:migrate:new`, `db:migrate:apply:local`, and `db:migrate:apply:remote` npm scripts. The remote apply step runs automatically in CI on every deploy (`.github/workflows/deploy.yml`, `.github/workflows/content-deploy.yml`) — a prior version of this workflow diffed against the local D1 file even when asked to target "remote," which meant schema changes could be deployed in code without ever reaching production.
 
 ## Consequences
 

@@ -56,7 +56,7 @@ jobs:
           EOF
 
       - name: Initialise local D1 schema
-        run: npm run db:migrate:init
+        run: npm run db:migrate:apply:local
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
