@@ -42,7 +42,7 @@ jobs:
     # Set up in: GitHub → Settings → Branches → Require status checks.
     environment:
       name: production
-      url: https://portfolio.jadix117.workers.dev
+      url: https://utlogiclabs.com
 
     steps:
       - name: Checkout
