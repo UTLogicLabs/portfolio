@@ -10,4 +10,6 @@ export default [
   route("projects", "routes/projects._index.tsx"),
   route("projects/:slug", "routes/projects.$slug.tsx"),
   route("contact", "routes/contact.tsx"),
+  route("admin/login", "routes/admin.login.tsx"),
+  route("admin/comments", "routes/admin.comments.tsx"),
 ] satisfies RouteConfig;

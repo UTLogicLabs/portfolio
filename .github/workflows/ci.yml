@@ -47,6 +47,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Write E2E environment vars
+        run: |
+          cat > .dev.vars <<'EOF'
+          TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+          ADMIN_PASSWORD=test-admin-password
+          SESSION_SECRET=test-session-secret-do-not-use-in-production
+          EOF
+
       - name: Initialise local D1 schema
         run: npm run db:migrate:init
 

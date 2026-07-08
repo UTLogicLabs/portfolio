@@ -1,9 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { data, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import type { AppLoadContext } from "react-router";
 import { Resend } from "resend";
 import { getPrisma } from "~/db.server";
+import { verifyTurnstile } from "~/services/turnstile.server";
+import { escapeHtml } from "~/utils/html.server";
+import { useTurnstile } from "~/hooks/useTurnstile";
+import type { CloudflareEnv } from "~/types/env";
 
 export const meta: MetaFunction = () => [
   { title: "Contact — UTLogicLabs" },
@@ -20,36 +24,6 @@ interface ActionData {
   };
 }
 
-type TurnstileInstance = {
-  render: (
-    el: HTMLElement,
-    opts: {
-      sitekey: string;
-      callback: (token: string) => void;
-      'expired-callback': () => void;
-      'error-callback': (errorCode: string) => void;
-    }
-  ) => string;
-  remove: (widgetId: string) => void;
-  reset: (widgetId: string) => void;
-};
-
-type CloudflareEnv = {
-  portfolio_db: D1Database;
-  RESEND_API_KEY?: string;
-  TURNSTILE_SECRET_KEY?: string;
-  TURNSTILE_SITE_KEY: string;
-};
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 export async function loader({ context }: LoaderFunctionArgs) {
   const { cloudflare } = context as { cloudflare: { env: CloudflareEnv } };
   return { turnstileSiteKey: cloudflare.env.TURNSTILE_SITE_KEY };
@@ -60,27 +34,7 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
   const formData = await request.formData();
 
   const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
-  const turnstileSecret = cloudflare.env.TURNSTILE_SECRET_KEY;
-  // Skip Turnstile when no secret is configured (local dev / CI).
-  // Production always has the secret set via `wrangler secret put`.
-  let turnstilePassed = !turnstileSecret;
-  if (turnstileSecret) {
-    try {
-      const verifyRes = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret: turnstileSecret, response: turnstileToken }),
-      });
-      const verifyData = await verifyRes.json() as { success: boolean; "error-codes"?: string[] };
-      turnstilePassed = verifyData.success;
-      if (!verifyData.success) {
-        console.error("[turnstile] siteverify failed", verifyData["error-codes"]);
-      }
-    } catch {
-      // Network error calling siteverify — fail open to avoid blocking real users
-      turnstilePassed = true;
-    }
-  }
+  const turnstilePassed = await verifyTurnstile(turnstileToken, cloudflare.env.TURNSTILE_SECRET_KEY);
   if (!turnstilePassed) {
     return data<ActionData>(
       { errors: { form: "Bot check failed. Please try again." } },
@@ -133,50 +87,13 @@ export default function Contact() {
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
-  const [turnstileReady, setTurnstileReady] = useState(false);
-  const [turnstileError, setTurnstileError] = useState<string | null>(null);
-  const turnstileRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | undefined>(undefined);
+  const { turnstileRef, turnstileReady, turnstileError, resetTurnstile } = useTurnstile(turnstileSiteKey);
 
   useEffect(() => {
-    if (!turnstileSiteKey) return;
-    const w = window as unknown as { turnstile?: TurnstileInstance };
-    const renderWidget = () => {
-      if (!turnstileRef.current) return;
-      widgetIdRef.current = w.turnstile?.render(turnstileRef.current, {
-        sitekey: turnstileSiteKey,
-        callback: () => { setTurnstileReady(true); setTurnstileError(null); },
-        'expired-callback': () => setTurnstileReady(false),
-        'error-callback': (errorCode: string) => {
-          console.error("[turnstile] widget error", errorCode);
-          setTurnstileError("Bot verification failed. Please refresh the page and try again.");
-        },
-      });
-    };
-
-    if (w.turnstile) {
-      renderWidget();
-    } else {
-      const script = document.createElement("script");
-      script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
-      script.async = true;
-      script.onload = renderWidget;
-      document.head.appendChild(script);
+    if (actionData?.errors?.form) {
+      resetTurnstile();
     }
-
-    return () => {
-      if (widgetIdRef.current !== undefined) {
-        (window as unknown as { turnstile?: TurnstileInstance }).turnstile?.remove(widgetIdRef.current);
-        widgetIdRef.current = undefined;
-      }
-    };
-  }, [turnstileSiteKey]);
-
-  useEffect(() => {
-    if (actionData?.errors?.form && widgetIdRef.current !== undefined) {
-      (window as unknown as { turnstile?: TurnstileInstance }).turnstile?.reset(widgetIdRef.current);
-      setTurnstileReady(false);
-    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData?.errors?.form]);
 
   return (

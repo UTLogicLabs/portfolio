@@ -13,3 +13,23 @@ model ContactSubmission {
   message   String
   createdAt DateTime @default(now())
 }
+
+model Comment {
+  id         String   @id @default(cuid())
+  // "BLOG_POST" | "PROJECT" — a plain string since blog posts/projects are
+  // static MDX files with no DB row to foreign-key against, and this schema
+  // has no other enums to justify a SQLite-emulated one.
+  targetType String
+  targetSlug String
+  name       String
+  email      String
+  body       String
+  approved   Boolean  @default(false)
+  parentId   String?
+  parent     Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies    Comment[] @relation("CommentReplies")
+  createdAt  DateTime @default(now())
+
+  @@index([targetType, targetSlug, approved])
+  @@index([parentId])
+}
