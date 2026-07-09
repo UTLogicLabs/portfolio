@@ -2,8 +2,11 @@
 
 export const iconNames = [
   "ArrowRight",
+  "Desktop",
   "ExternalLink",
   "Github",
+  "Moon",
+  "Sun",
   "UtlogiclabsIcon",
   "UtlogiclabsLogoOutlined (1)",
   "UtlogiclabsLogoOutlined",

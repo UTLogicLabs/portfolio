@@ -46,11 +46,17 @@ describe("Nav", () => {
     expect(button).toHaveAttribute("aria-expanded", "false");
 
     await user.click(button);
-    expect(screen.getByRole("button", { name: /close menu/i })).toBeInTheDocument();
-    expect(screen.getByRole("button")).toHaveAttribute("aria-expanded", "true");
+    const closeButton = screen.getByRole("button", { name: /close menu/i });
+    expect(closeButton).toBeInTheDocument();
+    expect(closeButton).toHaveAttribute("aria-expanded", "true");
 
-    await user.click(screen.getByRole("button", { name: /close menu/i }));
+    await user.click(closeButton);
     expect(screen.getByRole("button", { name: /open menu/i })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows a theme toggle for both the desktop and mobile layouts", () => {
+    renderNav();
+    expect(screen.getAllByRole("button", { name: /switch theme/i })).toHaveLength(2);
   });
 
   it("closes the mobile menu when a nav link is clicked", async () => {
@@ -60,7 +66,7 @@ describe("Nav", () => {
     render(<Stub initialEntries={["/"]} />);
 
     await user.click(screen.getByRole("button", { name: /open menu/i }));
-    expect(screen.getByRole("button")).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /close menu/i })).toHaveAttribute("aria-expanded", "true");
 
     // Click the mobile-only "Blog" link (second one since desktop also renders it)
     const blogLinks = screen.getAllByRole("link", { name: "Blog" });
