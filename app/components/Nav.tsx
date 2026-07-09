@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, NavLink } from "react-router";
 import { Icon } from "~/components/Icon";
+import { ThemeToggle } from "~/components/ThemeToggle";
 
 const NAV_LINKS = [
   { to: "/projects", label: "Projects" },
@@ -38,19 +39,23 @@ export function Nav() {
               {label}
             </NavLink>
           ))}
+          <ThemeToggle />
         </div>
 
         {/* Mobile hamburger */}
-        <button
-          className="md:hidden flex flex-col gap-1.5 p-2 text-foreground"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((prev) => !prev)}
-        >
-          <span className={`block w-5 h-0.5 bg-current transition-transform ${open ? "translate-y-2 rotate-45" : ""}`} />
-          <span className={`block w-5 h-0.5 bg-current transition-opacity ${open ? "opacity-0" : ""}`} />
-          <span className={`block w-5 h-0.5 bg-current transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`} />
-        </button>
+        <div className="md:hidden flex items-center">
+          <ThemeToggle />
+          <button
+            className="flex flex-col gap-1.5 p-2 text-foreground"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            <span className={`block w-5 h-0.5 bg-current transition-transform ${open ? "translate-y-2 rotate-45" : ""}`} />
+            <span className={`block w-5 h-0.5 bg-current transition-opacity ${open ? "opacity-0" : ""}`} />
+            <span className={`block w-5 h-0.5 bg-current transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`} />
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu */}

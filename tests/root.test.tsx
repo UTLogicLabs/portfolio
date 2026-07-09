@@ -1,7 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { createRoutesStub, UNSAFE_ErrorResponseImpl } from "react-router";
-import App, { links, ErrorBoundary } from "~/root";
+import App, { links, ErrorBoundary, SYSTEM_THEME_SCRIPT } from "~/root";
 
 describe("App", () => {
   it("renders outlet children", async () => {
@@ -46,6 +46,24 @@ describe("links()", () => {
   it("includes apple-touch-icon link", () => {
     const result = links();
     expect(result).toContainEqual({ rel: "apple-touch-icon", href: "/apple-touch-icon.png" });
+  });
+});
+
+describe("SYSTEM_THEME_SCRIPT", () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+    document.documentElement.classList.remove("dark");
+  });
+
+  it("does not throw when window.matchMedia is unavailable", () => {
+    document.documentElement.dataset.theme = "system";
+    const originalMatchMedia = window.matchMedia;
+    // @ts-expect-error simulating an environment without matchMedia support
+    delete window.matchMedia;
+
+    expect(() => new Function(SYSTEM_THEME_SCRIPT)()).not.toThrow();
+
+    window.matchMedia = originalMatchMedia;
   });
 });
 

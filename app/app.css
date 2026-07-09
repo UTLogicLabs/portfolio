@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-primary: oklch(55% 0.2 260);
   --color-primary-foreground: oklch(98% 0.01 260);
@@ -17,4 +19,15 @@
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
+}
+
+.dark {
+  --color-primary: oklch(70% 0.18 260);
+  --color-primary-foreground: oklch(15% 0.02 260);
+  --color-secondary: oklch(60% 0.13 200);
+  --color-muted: oklch(22% 0.02 260);
+  --color-muted-foreground: oklch(65% 0.03 260);
+  --color-background: oklch(14% 0.015 260);
+  --color-foreground: oklch(96% 0.005 260);
+  --color-border: oklch(28% 0.02 260);
 }

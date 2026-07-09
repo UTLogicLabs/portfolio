@@ -5,11 +5,29 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 import type { Route } from "./+types/root";
 import "./app.css";
 import { Nav } from "~/components/Nav";
 import { Footer } from "~/components/Footer";
+import { parseThemeCookie } from "~/utils/theme";
+
+export function loader({ request }: Route.LoaderArgs) {
+  return { theme: parseThemeCookie(request.headers.get("Cookie")) };
+}
+
+export const SYSTEM_THEME_SCRIPT = `
+  if (
+    document.documentElement.dataset.theme === "system" &&
+    typeof window.matchMedia === "function"
+  ) {
+    document.documentElement.classList.toggle(
+      "dark",
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+  }
+`;
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -28,10 +46,19 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const data = useRouteLoaderData<typeof loader>("root");
+  const theme = data?.theme ?? "system";
+
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      data-theme={theme}
+      className={theme === "dark" ? "dark" : undefined}
+      suppressHydrationWarning
+    >
       <head>
         <meta charSet="utf-8" />
+        <script dangerouslySetInnerHTML={{ __html: SYSTEM_THEME_SCRIPT }} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
