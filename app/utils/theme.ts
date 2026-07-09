@@ -2,6 +2,7 @@ export type Theme = "light" | "dark" | "system";
 
 const THEMES: readonly Theme[] = ["light", "dark", "system"];
 const COOKIE_NAME = "theme";
+export const THEME_CHANGE_EVENT = "themechange";
 
 export function isTheme(value: string | undefined | null): value is Theme {
   return THEMES.includes(value as Theme);
@@ -11,7 +12,13 @@ export function parseThemeCookie(cookieHeader: string | null | undefined): Theme
   if (!cookieHeader) return "system";
 
   const match = cookieHeader.match(/(?:^|;\s*)theme=([^;]+)/);
-  const value = match ? decodeURIComponent(match[1]) : undefined;
+
+  let value: string | undefined;
+  try {
+    value = match ? decodeURIComponent(match[1]) : undefined;
+  } catch {
+    value = undefined;
+  }
 
   return isTheme(value) ? value : "system";
 }
@@ -47,4 +54,5 @@ export function commitTheme(theme: Theme): void {
 
   document.cookie = serializeThemeCookie(theme);
   applyTheme(theme);
+  document.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: { theme } }));
 }

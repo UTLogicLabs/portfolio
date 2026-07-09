@@ -21,6 +21,10 @@ describe("parseThemeCookie", () => {
   it("reads the theme cookie among other cookies", () => {
     expect(parseThemeCookie("__session=abc123; theme=dark; other=1")).toBe("dark");
   });
+
+  it("defaults to system instead of throwing on malformed percent-encoding", () => {
+    expect(parseThemeCookie("theme=%")).toBe("system");
+  });
 });
 
 describe("serializeThemeCookie", () => {

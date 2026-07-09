@@ -50,4 +50,28 @@ describe("ThemeToggle", () => {
     expect(document.cookie).toContain("theme=light");
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
+
+  it("syncs a second mounted instance when the first is clicked", async () => {
+    setInitialTheme("light");
+    const user = userEvent.setup();
+    render(
+      <>
+        <ThemeToggle />
+        <ThemeToggle />
+      </>
+    );
+
+    const [first, second] = screen.getAllByRole("button", { name: /currently light/i });
+    await user.click(first);
+
+    expect(first).toHaveAccessibleName(/currently system/i);
+    expect(second).toHaveAccessibleName(/currently system/i);
+  });
+
+  it("falls back to the system slot when the initial dataset theme is invalid", () => {
+    setInitialTheme("neon");
+    render(<ThemeToggle />);
+
+    expect(screen.getByRole("button", { name: /currently system/i })).toBeInTheDocument();
+  });
 });

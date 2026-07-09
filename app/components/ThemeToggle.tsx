@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "~/components/Icon";
-import { commitTheme, cycleTheme, type Theme } from "~/utils/theme";
+import { commitTheme, cycleTheme, isTheme, THEME_CHANGE_EVENT, type Theme } from "~/utils/theme";
 
 const SLOTS: { theme: Theme; icon: "Sun" | "Desktop" | "Moon"; label: string }[] = [
   { theme: "light", icon: "Sun", label: "Light" },
@@ -9,9 +9,20 @@ const SLOTS: { theme: Theme; icon: "Sun" | "Desktop" | "Moon"; label: string }[]
 ];
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>(
-    () => (typeof document !== "undefined" ? (document.documentElement.dataset.theme as Theme) : undefined) ?? "system"
-  );
+  const [theme, setTheme] = useState<Theme>(() => {
+    const initial = typeof document !== "undefined" ? document.documentElement.dataset.theme : undefined;
+    return isTheme(initial) ? initial : "system";
+  });
+
+  useEffect(() => {
+    function handleThemeChange(event: Event) {
+      const next = (event as CustomEvent<{ theme: Theme }>).detail?.theme;
+      if (isTheme(next)) setTheme(next);
+    }
+
+    document.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    return () => document.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+  }, []);
 
   function handleClick() {
     const next = cycleTheme(theme);
@@ -22,7 +33,7 @@ export function ThemeToggle() {
   return (
     <button
       type="button"
-      aria-label={`Switch theme (currently ${SLOTS.find((slot) => slot.theme === theme)?.label})`}
+      aria-label={`Switch theme (currently ${SLOTS.find((slot) => slot.theme === theme)?.label ?? "system"})`}
       onClick={handleClick}
       className="inline-flex items-center rounded-full border border-border p-0.5"
     >
