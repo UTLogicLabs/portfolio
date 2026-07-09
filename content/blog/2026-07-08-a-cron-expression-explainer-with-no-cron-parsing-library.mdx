@@ -1,0 +1,107 @@
+---
+title: "A Cron Expression Explainer With No Cron-Parsing Library"
+date: "2026-07-08"
+description: "Building a paste-and-explain cron tool from a hand-written parser — and why day-of-month and day-of-week secretly combine with OR, not AND."
+tags: ["react", "vite", "typescript", "vitest"]
+featured: false
+---
+
+Wanted a small tool for the "wait, what does `*/15 9-17 * * 1-5` actually run" moment — paste a cron expression, get a plain-English explanation, a warning if the expression is misleading, and the next 10 run times. Built `cron-expression-builder-explainer` end to end today on `vite` + `react` + `tailwind`, with a hand-written parser instead of pulling in `cron-parser` or similar, since the whole point was owning the AST all the way through explain/validate/next-runs.
+
+## One AST, four consumers
+
+Everything downstream — evaluator, explainer, validator, next-run search — walks the same `ParsedCron` shape, so the field rules (min/max per field, month and day names, which specials each field allows) live in one place:
+
+```ts
+export const FIELD_RULES: Record<FieldKind, FieldRule> = {
+  second: { min: 0, max: 59 },
+  minute: { min: 0, max: 59 },
+  hour: { min: 0, max: 23 },
+  dayOfMonth: { min: 1, max: 31, allowsL: true, allowsW: true },
+  month: { min: 1, max: 12, names: FULL_MONTH_NAMES },
+  dayOfWeek: { min: 0, max: 6, names: FULL_DAY_NAMES, allowsL: true, allowsHash: true },
+}
+```
+
+The parser turns each field into a list of `FieldItem`s — `wildcard | value | range | step | last | nearestWeekday | nthWeekday` — and everything else is a `switch` over that union. 24 unit tests on the parser alone, mostly invalid-input cases, since a hand-rolled parser is exactly the kind of thing that silently accepts garbage if you don't test the rejection paths.
+
+## The OR trap
+
+The one rule in cron that trips almost everyone up at some point: when both day-of-month and day-of-week are restricted, the schedule fires when **either** matches — not when both do. `0 0 15 * MON` isn't "the 15th, if it's a Monday." It's "the 15th, and also every Monday." The evaluator encodes it directly:
+
+```ts
+const domRestricted = !parsed.dayOfMonth.isWildcard
+const dowRestricted = !parsed.dayOfWeek.isWildcard
+
+if (domRestricted && dowRestricted) {
+  // Standard cron semantics: when both fields are restricted, a date
+  // matches if it satisfies EITHER field (OR), not both (AND).
+  return domOk || dowOk
+}
+if (domRestricted) return domOk
+if (dowRestricted) return dowOk
+return true
+```
+
+Since this is exactly the kind of thing you don't notice until a job runs more often than intended, `validateCron` surfaces it as a warning the moment both fields are restricted, and the explainer's sentence spells out the OR relationship in words rather than leaving it implicit — the goal was for the tool to catch the mistake, not just render the schedule correctly and let you misread it anyway.
+
+## Nearest-weekday and nth-weekday, because Quartz syntax leaks everywhere
+
+Even though the base grammar is standard five/six-field cron, `W` (nearest weekday) and `#` (nth weekday of month) show up constantly in real-world expressions people paste in, so they're supported too:
+
+```ts
+// Quartz-style "nearest weekday" rule: if the target day falls on a
+// weekend, move to the closest weekday without crossing into another month.
+function nearestWeekday(date: Date, targetDay: number): number {
+  const lastDay = lastDayOfMonth(date)
+  const day = Math.min(targetDay, lastDay)
+  const dow = new Date(date.getFullYear(), date.getMonth(), day).getDay()
+
+  if (dow === 6) {
+    // Saturday
+    return day === 1 ? day + 2 : day - 1
+  }
+  if (dow === 0) {
+    // Sunday
+    return day === lastDay ? day - 2 : day + 1
+  }
+  return day
+}
+```
+
+The "don't cross into another month" clamp matters at the edges — `15W` on a month where the 1st is a Saturday shouldn't jump backward into the previous month just because `day - 1` would land there.
+
+## Next-run search needs an escape hatch
+
+Computing the next N run times is a brute-force forward scan: step by a tick (seconds if a seconds field is present, otherwise minutes), check `matches()`, repeat. The trap is expressions that are never satisfiable — `0 0 31 2 *` asks for February 31st, which doesn't exist. Without a bound, that's an infinite loop:
+
+```ts
+const MAX_SEARCH_YEARS = 4
+
+export function computeNextRuns(parsed: ParsedCron, from: Date, count: number): NextRunsResult {
+  const stepMs = parsed.hasSecondsField ? SECOND_MS : MINUTE_MS
+  const maxIterations = Math.floor((MAX_SEARCH_YEARS * 365 * 24 * 60 * 60 * 1000) / stepMs)
+
+  let candidate = nextTickAfter(from, stepMs)
+  const runs: Date[] = []
+  let iterations = 0
+
+  while (runs.length < count && iterations < maxIterations) {
+    if (matches(parsed, candidate)) {
+      runs.push(new Date(candidate))
+    }
+    candidate = new Date(candidate.getTime() + stepMs)
+    iterations++
+  }
+
+  return { runs, incomplete: runs.length < count }
+}
+```
+
+`incomplete: true` is the signal the UI needs to say "this schedule may never run" instead of just showing an empty list and looking broken. Four years was a somewhat arbitrary cap, but it's comfortably past any realistic once-a-leap-year expression while still bailing fast on truly impossible ones.
+
+## Wiring it up
+
+`parseCron` is the single entry point — split the raw string into 5 or 6 space-separated fields, run each through the field parser, and hand back a `ParsedCron` that `matches`, `validateCron`, `computeNextRuns`, and the explainer all consume without needing to know how it was constructed. The UI is a thin shell on top: an input that reparses on every change but doesn't clobber the last valid parse on a parse error, a `WarningsBanner` above the explanation panel, and a next-10-runs list.
+
+Scaffolded the project, wrote the whole cron core with tests, wired up the UI, added a GitHub Actions workflow, and rewrote the README — all in one sitting, husky + commitlint enforcing conventional commits the whole way through.
