@@ -4,6 +4,7 @@ import type { AppLoadContext } from "react-router";
 import type { ComponentType } from "react";
 import type { Route } from "./+types/blog.$slug";
 import { readTime } from "~/utils/readTime";
+import { resolvePost } from "~/utils/blogSlug";
 import { getPrisma } from "~/db.server";
 import { buildCommentTree } from "~/utils/comments";
 import { submitComment, type SubmitCommentResult } from "~/services/comments.server";
@@ -31,13 +32,14 @@ export async function loader({
   context?: AppLoadContext;
 }) {
   const modules = import.meta.glob<PostModule>("../../content/blog/*.mdx");
-  const mod = modules[`../../content/blog/${params.slug}.mdx`];
+  const resolved = resolvePost(modules, params.slug);
 
-  if (!mod) {
+  if (!resolved) {
     throw data("Post not found", { status: 404 });
   }
 
-  const resolved = await mod();
+  const { canonicalSlug, mod } = resolved;
+  const post = await mod();
 
   const { cloudflare } = (context ?? {}) as { cloudflare?: { env: CloudflareEnv } };
   let comments: ReturnType<typeof buildCommentTree> = [];
@@ -45,7 +47,7 @@ export async function loader({
   if (cloudflare) {
     const db = getPrisma(cloudflare.env.portfolio_db);
     const rows = await db.comment.findMany({
-      where: { targetType: "BLOG_POST", targetSlug: params.slug, approved: true },
+      where: { targetType: "BLOG_POST", targetSlug: canonicalSlug, approved: true },
       orderBy: { createdAt: "asc" },
     });
     comments = buildCommentTree(rows);
@@ -53,9 +55,9 @@ export async function loader({
   }
 
   return {
-    frontmatter: resolved.frontmatter,
-    slug: params.slug,
-    readTime: readTime(resolved.wordCount ?? 0),
+    frontmatter: post.frontmatter,
+    slug: canonicalSlug,
+    readTime: readTime(post.wordCount ?? 0),
     comments,
     turnstileSiteKey,
   };
@@ -65,10 +67,16 @@ export async function action({ request, params, context }: ActionFunctionArgs & 
   const { cloudflare } = context as { cloudflare: { env: CloudflareEnv } };
   const formData = await request.formData();
 
+  const modules = import.meta.glob<PostModule>("../../content/blog/*.mdx");
+  const resolved = resolvePost(modules, params.slug!);
+  if (!resolved) {
+    throw data("Post not found", { status: 404 });
+  }
+
   const result = await submitComment(
     {
       targetType: "BLOG_POST",
-      targetSlug: params.slug!,
+      targetSlug: resolved.canonicalSlug,
       name: String(formData.get("name") ?? ""),
       email: String(formData.get("email") ?? ""),
       body: String(formData.get("body") ?? ""),

@@ -1,0 +1,87 @@
+---
+title: "Remix 3's Real Gamble Isn't 'AI-First' — It's Ditching React Entirely"
+date: "2026-07-09"
+description: "Remix 3 beta.5 shipped without a Preact fork, without hooks, and without React at all — a from-scratch component model, plus what the team said when pressed on bundle size, migration, and production readiness."
+tags: ["remix", "react-router", "react", "javascript", "frameworks"]
+featured: false
+---
+
+Remix shipped beta.5 of Remix 3 earlier this month (July 1), and if you skim the coverage you'll see the same line repeated everywhere: it's "optimized for coding agents." That's the least interesting thing about it, and it's burying the actual bet.
+
+Here's the bet: Remix walked away from React and built its own UI library and component model from scratch. No hooks. No `useState`. (Worth a correction up front: the "Wake up, Remix" post floated forking Preact as a starting point, but that idea never shipped — they scrapped it and unveiled the real, from-scratch component model at Remix Jam back in October 2025.) If you're currently running Remix v2 or React Router in production — which, if you're reading this, you probably are — this is the part that should have your attention, not the AI copy.
+
+## What actually shipped
+
+Quick scope check, because "beta" undersells how much is already here. Remix 3 isn't a routing library with a new API. It's ~40 published `@remix-run/*` packages: routing (`route-pattern`, `fetch-router`), a full middleware stack (auth, CORS, CSRF, compression, sessions, logging), file storage with an S3 adapter, its own relational query builder with MySQL/Postgres/SQLite adapters, its own test framework, its own schema validator, a CLI, and a first-party UI component library with 15+ headless primitives — accordion, combobox, menu, popover, select, tabs, the whole Radix-shaped list.
+
+"Avoid dependencies, goal zero" is one of their six stated design principles, and they're taking it literally. That's either refreshing or a pretty big reinvent-everything undertaking, depending on how much you trust one team to out-build the ecosystem on session storage, CSRF middleware, and a SQL query builder simultaneously. Historically, in JS-land, betting against "someone already solved this and 10,000 people have found the edge cases" is a bet that usually loses.
+
+When pressed on this directly, the team's own framing clarifies the ambition, and it's a better story than "we don't trust npm": they don't want Remix to be a React framework, or a metaframework of any kind — they want it to be closer to Ruby on Rails for JavaScript. Rails owns its ORM, its asset pipeline, and its view layer too; nobody calls that paranoia, they call it "the Rails way." Read through that lens, the 40-package pile isn't dependency anxiety, it's an opinionated full-stack framework building the stack it wants. Whether the execution earns the comparison is still an open question.
+
+## No hooks, no useState, no React
+
+The part that actually matters: Remix 3 components aren't React components. They're plain functions that hold local mutable variables and re-render only when you tell them to, via an explicit `handle.update()` call. Behavior and styling get composed through "mixins" rather than context providers or hook composition. Here's their own example, lightly trimmed:
+
+```tsx
+function CopyToClipboard(handle: Handle<{ url: string }>) {
+  let state: "idle" | "copied" | "error" = "idle"
+
+  return () => {
+    let label = state === "idle" ? "Copy to clipboard" : state === "copied" ? "Copied" : "Error"
+
+    return (
+      <button
+        aria-label={label}
+        mix={[
+          btn.secondaryStyle,
+          on("click", async (_, signal) => {
+            try {
+              await navigator.clipboard.writeText(handle.props.url)
+            } catch {
+              state = "error"
+              handle.update()
+              return
+            }
+            state = "copied"
+            handle.update()
+          }),
+        ]}
+      >
+        {state === "copied" ? <Glyph name="check" /> : <Glyph name="clipboard" />}
+      </button>
+    )
+  }
+}
+```
+
+That's closer to imperative DOM code wearing a JSX costume than it is to anything React-shaped. No dependency array to get wrong, no stale closure footguns, no rules-of-hooks linter babysitting you. It's also a real departure — every mental model you've built up for React state management doesn't transfer.
+
+The framing that this is "for agents" mostly obscures a simpler point: simple, explicit, predictable APIs have always been good API design. That was true before LLMs existed. Slapping "model-first" on the label doesn't make cutting the cord from React's ecosystem free — it just gives the tradeoff a more fundable-sounding name.
+
+Worth being fair about the "why," though. This isn't "Preact couldn't do the job" — when asked directly, the team's answer was that Remix wants to own the entire stack, and specifically wanted to reconsider a paradigm that leans on hooks instead of plain JavaScript scope for state. That's a deliberate rejection of the hooks model, not a technical workaround. (The long version is in the Remix Jam reveal talk, "Introducing Remix 3 Part 1" with Ryan Florence and Michael Jackson, if you want the unabridged philosophy.)
+
+On the numbers, there aren't any public ones yet. Asked directly about bundle size and perf: last internal check had a Remix app smaller than an equivalent React app, there's a benchmark in the repo, and the stated goal is "same ballpark as the major frameworks" — but they're deliberately not marketing benchmark numbers, on the theory that once you publish a number, that number becomes the entire conversation. Outside benchmarking is welcomed, just not something they're pushing themselves. Defensible stance, but it also means the "no hooks, better perf" pitch is currently a claim you take on faith, not one you can verify yourself.
+
+And the cord is real. Walk away from React, ship your own component model from scratch, and you've quietly opted out of: every React-only component library on npm, the "I know React" hiring pool, React DevTools, most Storybook addons, every Stack Overflow answer written in the last decade. `@remix-run/ui` has to be genuinely good, not just adequate — there's no free fallback to "I'll just grab a React library for this one thing." (There is an interop story — dropping a Remix 3 component into an existing React app, or vice versa, works the same way embedding Vue in React works today: through an interop layer. That's real, but it's a tax you pay, not a zero-cost escape hatch.) That's the actual risk in this beta, and it's the one nobody's writing headlines about.
+
+## The two ideas actually worth stealing
+
+Buried under the React-fork news, two design decisions are worth understanding on their own merits, independent of whether you'd ever adopt Remix 3 itself.
+
+**Frames.** A frame is server-rendered UI with a `src` — the client can load it, reload it, or navigate it independently, while the server keeps rendering HTML. If that sounds familiar, it's because Rails' Hotwire has been doing Turbo Frames for years. The pitch is the same: server/client sync as URLs, requests, and responses instead of a bespoke RPC wire protocol (i.e., not RSC). Whether Remix's version holds up under real app complexity is unproven, but "steal Hotwire's good ideas for the JS ecosystem" is a defensible place to start.
+
+**Unbundling.** No bundler-dependent semantics anywhere in the API surface — no special meaning attached to import statements, no typegen assumptions, nothing that only works because a compiler pre-processed it. The runtime is the source of truth. This is a direct shot at the Vite-plugin-everything model that Next, Remix v2, and SvelteKit all converged on. If you've ever debugged a bug that only exists because of how a bundler transformed your code, you understand the appeal immediately.
+
+## One thing that's actually new, not just relabeled
+
+Skepticism aside, one part of the "built for agents" story isn't just marketing: the CLI template ships literal agent skill files. Run `npx remix@next new my-app` and the generated project drops a skill into `.agents/` — a convention most coding-agent harnesses already respect. Claude doesn't, at least not yet, so using Claude Code against a fresh Remix 3 app currently means symlinking `.agents` to `.claude` yourself. Small detail, but it's a real, working decision, not a slogan — whether it's the right one is a separate question, but it's worth acknowledging as new rather than dismissing everything under the "model-first" banner as hype.
+
+## Where this leaves you
+
+If you're shipping on Remix v2 or React Router right now: nothing changes today, and don't wait for an official migration path — there isn't one, and there won't be. Asked directly, the team was blunt: "we were serious when we said Remix v2 was merging into React Router... trying to pull people back to Remix again would just hurt any credibility we still have." React Router keeps getting maintained on its own timeline (v8 shipped in June) because they genuinely like it as a React framework — they just don't want Remix to be one, or any kind of metaframework, going forward.
+
+One useful data point if you're curious anyway: one of the founders has personally hand-migrated React Router apps over to Remix 3, and said it wasn't very difficult — credit to LLM-assisted porting rather than any official codemod. Take that as "feasible for a curious weekend," not "supported." As for whether anyone's actually trusting this in production: remix.run itself already runs on Remix 3. Inside Shopify, nothing's shipped yet, but multiple teams are piloting it and feeding results back to the core team. And expect the ground to keep shifting under you if you do build on it now — breaking changes are explicit policy for every beta between now and a stable tag; semver discipline starts once they call it stable, not before.
+
+Whether that bet pays off comes down to one unglamorous question: is `@remix-run/ui`, plus everything else in that 40-package pile, good enough that losing React's ecosystem doesn't sting? A from-scratch component model is easy to demo. Replacing a decade of npm's React-shaped gravity is the hard part, and it's the part this beta hasn't proven yet either way — an interop layer softens the edges, but it's not the same as the ecosystem just being there.
+
+**Sources:** [remix.run/blog/wake-up-remix](https://remix.run/blog/wake-up-remix) (May 2025) · [remix.run/blog/remix-3-beta-preview](https://remix.run/blog/remix-3-beta-preview) (Apr 30, 2026) · [remix@3.0.0-beta.5 release notes](https://github.com/remix-run/remix/releases/tag/remix%403.0.0-beta.5) (Jul 1, 2026) · [remix-run/remix README](https://github.com/remix-run/remix) (package list, design principles) · ["Introducing Remix 3 Part 1"](https://www.youtube.com/watch?v=iZl0IKj0HHc), Remix Jam (Oct 2025) · direct answers from the Remix team, Discord (Jul 2026)
