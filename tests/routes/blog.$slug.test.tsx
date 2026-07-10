@@ -37,11 +37,17 @@ describe("BlogPost loader", () => {
   });
 
   it("returns frontmatter and slug for an existing post", async () => {
-    const result = await loader({ params: { slug: "hello-world" } });
-    expect(result.slug).toBe("hello-world");
+    const result = await loader({ params: { slug: "2026-06-21-hello-world" } });
+    expect(result.slug).toBe("2026-06-21-hello-world");
     expect(result.frontmatter.title).toBe("Hello, World");
     expect(result.frontmatter.date).toBe("2026-06-21");
     expect(typeof result.frontmatter.description).toBe("string");
+  });
+
+  it("resolves a legacy short slug to the canonical date-prefixed slug", async () => {
+    const result = await loader({ params: { slug: "hello-world" } });
+    expect(result.slug).toBe("2026-06-21-hello-world");
+    expect(result.frontmatter.title).toBe("Hello, World");
   });
 
   it("returns a numeric readTime for an existing post", async () => {
@@ -59,15 +65,15 @@ describe("BlogPost loader", () => {
 
   it("fetches only approved comments for this post and builds a tree", async () => {
     mockFindMany.mockResolvedValue([
-      { id: "a", parentId: null, targetType: "BLOG_POST", targetSlug: "hello-world" },
-      { id: "b", parentId: "a", targetType: "BLOG_POST", targetSlug: "hello-world" },
+      { id: "a", parentId: null, targetType: "BLOG_POST", targetSlug: "2026-06-21-hello-world" },
+      { id: "b", parentId: "a", targetType: "BLOG_POST", targetSlug: "2026-06-21-hello-world" },
     ]);
     const result = await loader({
       params: { slug: "hello-world" },
       context: makeContext() as never,
     } as never);
     expect(mockFindMany).toHaveBeenCalledWith({
-      where: { targetType: "BLOG_POST", targetSlug: "hello-world", approved: true },
+      where: { targetType: "BLOG_POST", targetSlug: "2026-06-21-hello-world", approved: true },
       orderBy: { createdAt: "asc" },
     });
     expect(result.comments).toHaveLength(1);
@@ -93,13 +99,13 @@ describe("BlogPost action", () => {
     } as never);
   }
 
-  it("delegates to submitComment with targetType BLOG_POST and the route's slug", async () => {
+  it("delegates to submitComment with targetType BLOG_POST and the canonical slug", async () => {
     mockSubmitComment.mockResolvedValue({ success: true });
     await callAction({ name: "Josh", email: "josh@example.com", body: "Nice post!" });
     expect(mockSubmitComment).toHaveBeenCalledWith(
       expect.objectContaining({
         targetType: "BLOG_POST",
-        targetSlug: "hello-world",
+        targetSlug: "2026-06-21-hello-world",
         name: "Josh",
         email: "josh@example.com",
         body: "Nice post!",
@@ -158,7 +164,7 @@ describe("BlogPost component", () => {
       date: "2026-06-21T12:00:00.000Z",
       description: "The first post on this blog — why I built this site.",
     },
-    slug: "hello-world",
+    slug: "2026-06-21-hello-world",
     readTime: 1,
     comments: [],
     turnstileSiteKey: "test-site-key",
