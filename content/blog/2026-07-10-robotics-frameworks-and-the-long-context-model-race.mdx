@@ -1,0 +1,144 @@
+---
+title: 'Robotics Is Having Its Framework Moment, and Long-Context Models Are Having Their Efficiency Moment'
+date: '2026-07-10'
+description: 'Notes from a talk covering why ROS 2 is getting replaced, what real robotics data collection actually looks like, and why one AI lab is betting on subquadratic attention instead of RAG.'
+tags: ['robotics', 'ros2', 'llm', 'long-context', 'ai']
+---
+
+Two talks, two different frontiers, one shared thesis: the tooling everyone has been using to work around a limitation is starting to get replaced by tooling that removes the limitation. In robotics, that limitation is ROS 2. In language models, it's the context window.
+
+---
+
+## Why Robotics Is Suddenly Interesting Again
+
+The pitch for "now" as the moment for robotics comes down to a few numbers stacking in the same direction.
+
+- **Hardware got cheap.** The robot used in the talk, DanBot, is about **$5,000**. The same class of robot cost roughly **$100,000** three or four years ago.
+- **Compute got fast enough to not feel laggy.** Running on Jetson Orin/Core hardware was described as the first time the speaker used robot compute with no noticeable lag — the newer chip is roughly **8x faster than Orin**.
+- **LLMs make behavior generation and iteration tractable.** Before a robot acts in the real world, it's running through thousands of simulations first.
+- **Demand isn't just from robotics engineers anymore.** Tools like ClawBot, Reachy, Lovable, and Revver are pulling in millions of non-technical builders who just want an AI system that does something in the physical world.
+
+The long-term vision is a robot-app marketplace — the Android model, applied to humanoid robots. Multiple manufacturers, shared standards, one marketplace, apps that are vetted so they can't hurt the robot or anyone near it. Getting there requires three layers that mostly don't exist yet: a hardware abstraction layer, a dev environment, and the marketplace itself. Estimated timeline: a couple of years, because most of the foundation still needs to be built.
+
+---
+
+## ROS 2 Got the Industry This Far, and Now It's the Bottleneck
+
+Almost everything in robotics today runs on **ROS 2** — the framework that manages nodes, isolates failures, and lets robots collaborate. It's earned that position:
+
+| Strength | Why it matters |
+|---|---|
+| Replayable actions (ROS 2 bags) | You can record and replay what a robot did to diagnose failures |
+| Node isolation | One node crashing doesn't take down the whole system |
+| Multi-language support | Teams aren't locked into one stack |
+| 15–20 years of ecosystem | Deep library of existing code and tooling |
+
+The typical path is: prototype on an Arduino or Raspberry Pi, hit a complexity wall, migrate to ROS 2. And then the pain starts.
+
+The setup alone took **15 hours** the first time, tied to a specific Ubuntu version. The speaker called it the toughest developer environment they've encountered in their career — not a small claim. Beyond the onboarding tax: message drops, poor scalability at a global level, and documentation that doesn't hold up. Companies like Figure and Optimus don't lean on ROS 2 long-term — they build their own full stacks instead. And when the speaker tried to get AI to generate ROS 2 code for a toy rover, it produced **over a million lines**, most of it unusable. Letting AI freely code robot control logic without guardrails is a real risk — it can break the robot, break a person nearby, or just never launch.
+
+### The proposed fix: Happy
+
+The team is releasing an open framework called **Happy**, meant to replace ROS 2's node-control layer specifically — not the whole ecosystem, just the part that's currently the biggest pain point. The design goals:
+
+- Automatic safety controls, so no matter what a user writes in Python or Claw, it can't damage the actuator or produce unsafe behavior.
+- Native support for Claw-based programming, alongside Python and ROS.
+- Setup in about **half an hour**, usable from a browser.
+- Simulator-to-robot sync, since current simulators drift from real hardware behavior.
+- Enough abstraction that a specialist — an AI person, a telecom-ops person — can work on their slice without owning the whole stack.
+
+The framing is that hardware safety, simulation alignment, and code abstraction all have to exist before any real AI-coding marketplace for robots is possible.
+
+---
+
+## The Actual Bottleneck Is Data, Not Compute
+
+If there's one throughline in the talk, it's this: simulation isn't enough. A robot can look great in sim and fail immediately in reality, and the field doesn't have nearly enough real-world data to cover the space of physical environments a robot might encounter.
+
+The best current source of training data is teleoperation, and the method matters a lot:
+
+- **Skeleton-based motion capture** gets the full movement pattern, not just an end state.
+- **3D-printed gloves** (Hugging Face built a version of these) let someone perform ordinary tasks — opening a drawer, cooking — and produce motion data that maps cleanly onto a robot's joints.
+- **Video is the weakest signal.** Translating a hand gesture from camera footage into robot motion is ambiguous, and different robots move differently anyway, so video-derived motion requires guesswork that skeleton or glove capture avoids.
+
+Even within "good" data collection, there's variance worth accounting for: people from the same city pack a box differently from each other, and that inter-operator and inter-regional variance has to get captured and simulated across styles to find what actually performs best. The granularity required is easy to underestimate — moving an elbow isn't one motion, it's roughly **15 joints** coordinating, so training has to capture the full range of motion, not just the visible outcome.
+
+---
+
+## Hardware Lessons: Don't Build What You Can Buy
+
+The hardware take is blunt: **don't build your own robot hardware unless you have to.** Robots break during development — the team has already had one hit itself and need parts replaced — and open-source, 3D-printable, or locally sourceable parts avoid getting stuck waiting on distant manufacturing.
+
+Building in-house in the US specifically gets called out as a losing bet right now. K-Scale is cited as a well-funded example that still couldn't hit a price point competitive with Chinese manufacturers. Current reference points:
+
+| Component | Approx. price | Trend |
+|---|---|---|
+| Top half of robot | ~$5,000 | — |
+| Top half + mobile base | ~$8,000 | — |
+| Skeleton | ~$2,000 | Expected to fall toward ~$1,000 |
+
+Expect roughly a **20% price decline** over the next year or two as competition from Chinese manufacturers continues. Current desktop-class robots max out around **5kg** payload — capable for a lot of tasks, not yet built for heavy objects.
+
+---
+
+## Where RL Helps and Where It Doesn't
+
+Reinforcement learning gets a fair but limited endorsement: it works when the environment is controlled, the task is repetitive, and the motion is consistent. It falls apart the moment a new object appears, someone walks into frame, or the environment shifts. In those cases the fix isn't more RL tuning — it's more real data. Sometimes the right call is to just throw out an awkward RL-generated behavior and replace it with real teleoperation data instead.
+
+Simulation itself has the same ceiling. The sim-to-real gap — rough surfaces, snow, rocks, a label that hasn't finished drying when a robot tries to grab it — is exactly why a warehouse robot that worked flawlessly in sim needed a two-week rebuild after the label came off the box mid-pick in production. The best simulation tools right now, per the talk, aren't robotics-specific at all: video game engines, Gaussian splatting, and generative models for building out world variety. The lesson is the same one from the data section — capture as much real-world signal as you can, and try to exhaust the condition space for a narrow task rather than generalizing prematurely.
+
+---
+
+## The Anthropic Robot-Coding Experiment
+
+Anthropic ran a comparison: one team coded a robot dog's behavior without AI assistance, another used Claude Opus 4.7, both teams made up of non-robot coders. The AI-assisted team was about **20x faster** at writing the code.
+
+Speed wasn't the same as success, though. Both teams still struggled with things like moving a beach ball, basic fetch tasks, and low-level actuation policy — the exact layer Happy is trying to solve. It's a useful data point: AI collapses the coding time dramatically, but the physical control problem underneath doesn't go away just because the code got written faster.
+
+---
+
+## Engineering Discipline That Actually Matters at Fleet Scale
+
+A few practices came up repeatedly as non-negotiable for running robots reliably:
+
+- **Observability** — being able to pinpoint exactly what happened when a robot does something unexpected, not just "it stopped working."
+- **Reproducibility** — the team runs three robots in three different locations specifically to catch hardware-configuration drift before it becomes a production surprise.
+- **Replay** — capturing and replaying the exact moment a robot misbehaves, especially after it hits itself or does something unpredictable.
+- **Manufacturer stability** — preferring vendors who keep protocols consistent from v1 to v2 to v3, since manufacturers changing internals under you is a recurring source of pain.
+
+And a direct warning for anyone about to buy a robot today: it will very likely **not** be compatible with this kind of framework in four or five months. The ecosystem is moving fast enough that current hardware purchases are a bet on near-term obsolescence, not a safe long-term investment.
+
+---
+
+## Part Two: Long-Context Models and the Case Against Scaffolding
+
+The second half of the talk pivots to foundation models, and opens with a pointed observation: RAG pipelines, external memory databases, and agentic workflows all exist for the same reason — models have a limited context window, and everything else is scaffolding built to work around that limit.
+
+The speaker frames this as a **scaffolding test**: if a workflow needs retrieval, summarization, and orchestration just to answer a question, that's a symptom of a context ceiling, not a feature of good system design. A concrete example: aggregate five years of 10-Ks and 10-Qs across 200+ companies, extract and normalize risk factors, find topic drift, group by sector and year, generate a risk profile. Doable with a DAG — but brittle, and it gets more brittle as the pipeline grows.
+
+There's a sharper version of the problem, too: RAG systems often fail to reason across an entire document as a single artifact. If a contract references page 46 and your retrieval system pulls that page in isolation, it has no sense of how page 46 relates to the rest of the document — someone has to manually stitch that context back in, which reintroduces human bias and still doesn't cover every edge case.
+
+### SOCU's bet: subquadratic attention instead of more scaffolding
+
+SOCU's approach is to replace dense attention with **linearly scaling attention layers**. Linear attention isn't new — what's being claimed as differentiated is the specific implementation. At **1 million tokens**, they claim their approach uses **64.5x less compute** than best-in-class dense attention, which they're calling subquadratic sparse attention.
+
+The demo comparison was a genuinely hard retrieval task: identify every decision, commitment, or formal case opening since 2010 across global competition authorities relating to self-referencing or platform neutrality in digital markets, produce at least 150 entities, cluster them, identify remedy patterns, and compare authorities across clusters. Perplexity could retrieve relevant material but couldn't fit the synthesis into one context window. SOCU's model, with a **2 million token context window**, reportedly handled it in one pass. The implication being pushed here is that a bigger context window doesn't just mean "less retrieval work" — it changes what kinds of answers are even possible to produce.
+
+### What it takes to build a foundation model well
+
+Four things have to all be strong at once: **model architecture, evals, inference, and differentiated data.** A few specific lessons stood out:
+
+- **Dataset order is a hyperparameter.** Training on retrieval-heavy data before general knowledge data (or vice versa) measurably changes downstream benchmark results.
+- **Scale testing isn't optional.** Sharding across GPUs and nodes surfaces distributed-system failures and floating-point issues that are invisible on a single node but disastrous once distributed.
+- **Long-context gains can quietly hurt short-context performance**, so the team runs both long-context benchmarks (MRCR, Ruler, LRCR, GraphWalks) and short-context ones (GSM8K/GPQA-style QA, MMLU), plus custom evals built for specific design partners and target domains.
+- **Inference fails silently.** Launch scripts and serving stacks get tested as rigorously as the model itself.
+
+### Where they're pointing it
+
+SOCU's initial wedge is **finance, legal, and healthcare** — sectors that process enormous document volumes daily and where, in the speaker's view, AI hasn't moved the needle as much as it should have yet. Long-context reasoning is explicitly their P0; domain-specific verticals requiring whole-artifact reasoning are P1. They're not rejecting orchestration outright — the model is invokable via MCP and tool calls — but the strategic bet is that a genuinely long context window reduces how much orchestration you need in the first place, with a possible later move into coding-adjacent markets once the long-context and vertical bets pay off.
+
+---
+
+## The Common Thread
+
+Different domains, same shape of argument: robotics has been running on ROS 2 because nothing better existed, and language models have been running on RAG and agentic scaffolding for the same reason. Both talks make the case that the workaround isn't the destination — it's a placeholder for infrastructure that hasn't been built yet. The closing line from the second talk applies to both halves of this post: efficiency is intelligence. Not more compute or more force, just doing more with what's already there.
