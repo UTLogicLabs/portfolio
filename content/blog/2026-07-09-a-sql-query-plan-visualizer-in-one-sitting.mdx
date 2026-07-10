@@ -1,0 +1,161 @@
+---
+title: "A SQL Query Plan Visualizer, in One Sitting"
+date: "2026-07-09"
+description: "Paste an EXPLAIN plan from Postgres or SQLite, get a colored tree and a smell report — built end to end on React Router 7 and Cloudflare Workers, with an OKLCH color scale and a heuristic smell detector."
+tags: ["react-router", "cloudflare-workers", "typescript", "sql", "vitest"]
+featured: false
+---
+
+Wanted a paste-your-`EXPLAIN`-output tool that actually explains the plan back to you instead of just re-indenting it — cost/row coloring, an estimate-vs-actual mismatch signal, and a heuristic pass that flags the usual suspects (big seq scans, nested loops re-executing on every outer row, sorts spilling to disk). Built `sql-plan-visualizer` end to end today on React Router 7 + Cloudflare Workers, with D1-backed permalinks so a plan can be shared by URL.
+
+## One `PlanNode` shape, two parsers
+
+Postgres's `EXPLAIN (ANALYZE, BUFFERS)` text and SQLite's `EXPLAIN QUERY PLAN` output look nothing alike, so both parsers target a shared IR and everything downstream — coloring, smell detection, the tree UI — only ever sees `PlanNode`:
+
+```ts
+export interface PlanNode {
+  id: string
+  operation: string
+  relationName?: string
+  indexName?: string
+  estimatedCost?: { startup: number; total: number }
+  estimatedRows?: number
+  estimatedWidth?: number
+  actualRows?: number
+  actualLoops?: number
+  actualTimeMs?: { startup: number; total: number }
+  filter?: string
+  extra: Record<string, string>
+  rawText: string
+  children: Array<PlanNode>
+}
+```
+
+An indent-stack parser per dialect builds a tree of these, with dialect-specific detail (Postgres's `Sort Method`, buffer stats, etc.) living in the `extra` bag rather than as first-class fields. `parsePlan.ts` auto-detects which parser to run and hands back the same shape either way, so `PlanTree`, `smellDetector`, and `colorScale` don't need to know or care which database produced the input.
+
+## Coloring cost and mismatch with OKLCH instead of a lookup table
+
+Rather than hand-picking a palette, cost-to-color and mismatch-to-color are both pure interpolation in OKLCH, so the gradient stays perceptually even instead of banding the way HSL does at the edges:
+
+```ts
+export function costToColor(node: PlanNode, maxCostInTree: number): string {
+  const cost = node.estimatedCost?.total
+  if (cost === undefined || maxCostInTree <= 0) return MUTED_COLOR
+
+  const t = clamp01(cost / maxCostInTree)
+  const lightness = lerp(90, 55, t)
+  const chroma = lerp(0.02, 0.18, t)
+  return `oklch(${lightness.toFixed(1)}% ${chroma.toFixed(3)} 260)`
+}
+```
+
+Mismatch coloring works off a ratio rather than a raw difference, since "estimated 10, got 100" and "estimated 10,000, got 100,000" are the same problem:
+
+```ts
+export function computeMismatch(node: PlanNode): MismatchInfo | null {
+  const estimated = node.estimatedRows
+  const actual = node.actualRows
+  if (estimated === undefined || actual === undefined || estimated <= 0) return null
+
+  const ratio = actual / estimated
+  const factor = Math.max(ratio, ratio > 0 ? 1 / ratio : Infinity)
+
+  if (factor < 3) return { factor, bucket: 'success' }
+  if (factor < 10) return { factor, bucket: 'warning' }
+  return { factor, bucket: 'danger' }
+}
+```
+
+`Math.max(ratio, 1 / ratio)` is the trick that makes both over- and under-estimates map to the same severity scale — a planner that expects 1,000 rows and gets 100 is exactly as wrong as one that expects 100 and gets 1,000.
+
+## The smell detector reuses the mismatch math instead of duplicating it
+
+`detectSmells` walks the tree once and, for Postgres, runs seq-scan, nested-loop, sort-spill, and row-estimate-mismatch rules per node (SQLite gets a lighter single rule, since `EXPLAIN QUERY PLAN` doesn't give actual row counts to compare against). The mismatch rule doesn't recompute the ratio itself — it calls straight into `computeMismatch` from the color module:
+
+```ts
+function rowEstimateMismatch(node: PlanNode): Finding[] {
+  const info = computeMismatch(node)
+  if (!info || info.factor < MISMATCH_FACTOR_THRESHOLD) return []
+
+  return [
+    {
+      id: `row-estimate-mismatch:${node.id}`,
+      ruleId: 'row-estimate-mismatch',
+      severity: 'danger',
+      affectedNodeId: node.id,
+      message: `Planner estimated ${node.estimatedRows?.toLocaleString()} rows but got ${node.actualRows?.toLocaleString()} (${info.factor.toFixed(1)}x off).`,
+      suggestion: `Statistics may be stale; consider ANALYZE ${node.relationName ?? 'the underlying table'}.`,
+    },
+  ]
+}
+```
+
+Nested-loop detection specifically checks the *inner* child's loop count, not just its row count — a nested loop only smells if the inner side is both expensive and getting re-executed:
+
+```ts
+function nestedLoopHighRows(node: PlanNode): Finding[] {
+  if (node.operation !== 'Nested Loop' || node.children.length < 2) return []
+  const inner = node.children[1]
+  const innerRows = inner.actualRows ?? inner.estimatedRows ?? 0
+  if (innerRows <= NESTED_LOOP_ROW_THRESHOLD || !inner.actualLoops || inner.actualLoops <= 1) return []
+  // ...
+}
+```
+
+Findings sort by severity (`danger` → `warning` → `info`) so the SmellPanel always leads with the thing most likely to actually be a problem.
+
+## The SSR theme flag that only shows up for returning visitors
+
+This one wasn't part of the plan — found it while wiring up an icon spritesheet to match the sibling portfolio project's convention. `useTheme` read `document.documentElement.classList` in a `useEffect` to sync React state with the boot script's already-applied `dark` class:
+
+```ts
+useEffect(() => {
+  setThemeState(document.documentElement.classList.contains('dark') ? 'dark' : 'light')
+}, [])
+```
+
+Works fine on first paint since the initial state defaults to `'light'` and the effect corrects it — but that correction happens *after* hydration, so a returning visitor with `theme=dark` in their cookie gets a one-frame flash where React's state says light while the DOM already says dark, and React 19 flags the mismatch. Fixed by threading the loader's cookie-resolved theme through context so the initial `useState` call gets the right answer immediately instead of discovering it in an effect:
+
+```ts
+export const ServerThemeContext = createContext<Theme | null>(null)
+
+function getInitialTheme(serverTheme: Theme | null): Theme {
+  if (typeof document === 'undefined') return serverTheme ?? 'light'
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
+}
+
+export function useTheme() {
+  const serverTheme = useContext(ServerThemeContext)
+  const [theme, setThemeState] = useState<Theme>(() => getInitialTheme(serverTheme))
+  // ...
+}
+```
+
+`Layout` provides `serverTheme` from the root loader's cookie read, so the very first render — server and client both — agrees with the boot script instead of a `useEffect` catching up a tick later.
+
+## Permalinks are D1 plus a random id, nothing fancier
+
+The share button posts the raw plan text and dialect to a D1-backed `plans` table and gets back a 10-character `nanoid` for the URL. The only wrinkle worth handling is a collision on insert, which gets one retry with a fresh id before giving up:
+
+```ts
+export async function savePlan(db: D1Database, input: { rawText: string; dialect: Dialect }): Promise<string> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const id = nanoid(10)
+    try {
+      await db
+        .prepare('INSERT INTO plans (id, raw_text, dialect) VALUES (?, ?, ?)')
+        .bind(id, input.rawText, input.dialect)
+        .run()
+      return id
+    } catch (error) {
+      const isUniqueViolation = error instanceof Error && /unique/i.test(error.message)
+      if (!isUniqueViolation || attempt === 1) throw error
+    }
+  }
+  throw new Error('Failed to save plan after retrying a colliding id')
+}
+```
+
+At 10 characters of nanoid's default alphabet the collision odds are astronomically low, but the retry is cheap insurance and means `savePlan` never throws over something that random chance will eventually produce.
+
+Scaffolded the project on `create-react-router` + Cloudflare Workers with Tailwind v4 theming, wrote both parsers with fixture-backed tests, the color scale, the smell detector, the tree UI, the D1 permalink route, and a Playwright e2e suite covering paste-to-tree, permalink save/reload, the parse-error state, and dark mode persistence — all in one sitting, husky + commitlint enforcing conventional commits the whole way through.
