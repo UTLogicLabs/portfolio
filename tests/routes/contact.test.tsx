@@ -189,6 +189,15 @@ describe("Contact component", () => {
     delete (window as unknown as Record<string, unknown>).turnstile;
   });
 
+  // The turnstile widget's callbacks are captured asynchronously (via a
+  // microtask after `window.turnstile` is detected), so tests that invoke
+  // them must wait for that capture instead of assuming it's done as soon
+  // as the button is in the DOM.
+  async function waitForTurnstileWidget() {
+    await screen.findByRole("button", { name: /send message/i });
+    await waitFor(() => expect(capturedComplete).toBeDefined());
+  }
+
   function makeStub(actionFn?: () => unknown) {
     return createRoutesStub([
       {
@@ -227,7 +236,7 @@ describe("Contact component", () => {
   it("submit button is enabled after Turnstile callback fires", async () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedComplete?.(); });
     await waitFor(() => expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled());
   });
@@ -235,7 +244,7 @@ describe("Contact component", () => {
   it("shows error message when Turnstile error callback fires", async () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedError?.(); });
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/bot verification failed/i)
@@ -245,7 +254,7 @@ describe("Contact component", () => {
   it("clears Turnstile error when widget subsequently completes", async () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedError?.(); });
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     act(() => { capturedComplete?.(); });
@@ -257,7 +266,7 @@ describe("Contact component", () => {
   it("submit button becomes disabled again when Turnstile token expires", async () => {
     const Stub = makeStub();
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedComplete?.(); });
     act(() => { capturedExpired?.(); });
     expect(screen.getByRole("button", { name: /send message/i })).toBeDisabled();
@@ -268,7 +277,7 @@ describe("Contact component", () => {
       errors: { name: "Name is required.", email: undefined, message: undefined },
     }));
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
@@ -281,7 +290,7 @@ describe("Contact component", () => {
       errors: { form: "Bot check failed. Please try again." },
     }));
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() =>
@@ -292,7 +301,7 @@ describe("Contact component", () => {
   it("shows success message after successful submission", async () => {
     const Stub = makeStub(async () => ({ success: true }));
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedComplete?.(); });
     await waitFor(() => expect(screen.getByRole("button", { name: /send message/i })).not.toBeDisabled());
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
@@ -306,7 +315,7 @@ describe("Contact component", () => {
       errors: { form: "Bot check failed. Please try again." },
     }));
     render(<Stub initialEntries={["/contact"]} />);
-    await screen.findByRole("button", { name: /send message/i });
+    await waitForTurnstileWidget();
     act(() => { capturedComplete?.(); });
     await userEvent.click(screen.getByRole("button", { name: /send message/i }));
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
