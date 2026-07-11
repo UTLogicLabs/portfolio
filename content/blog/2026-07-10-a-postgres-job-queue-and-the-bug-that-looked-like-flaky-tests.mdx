@@ -1,0 +1,125 @@
+---
+title: "A Postgres Job Queue, and the Bug That Looked Like Flaky Tests"
+date: "2026-07-10"
+description: "Building job-queue's core mechanics on FOR UPDATE SKIP LOCKED, chasing an integration-test flake down to a clock-skew root cause, and closing two TOCTOU races a Copilot review caught."
+tags: ["postgres", "typescript", "vitest", "backend", "concurrency"]
+featured: false
+---
+
+Started a new project today, `job-queue` — a Postgres-backed job queue with no Redis, no extra infra, just `FOR UPDATE SKIP LOCKED` and a partial unique index doing the work. Initial commit in the morning, core mechanics (`enqueue`, `claim`, `complete`, `fail`) by mid-afternoon, and then the more interesting part of the day: a Copilot review on the PR flagged two real race conditions, and chasing down what looked like unrelated test flakiness turned up a clock-skew bug that had been sitting in `enqueue()` the whole time.
+
+## Claiming jobs without a lock table
+
+`claimJobs` is a single query — a CTE that finds candidate rows with `FOR UPDATE SKIP LOCKED`, then an `UPDATE ... FROM ... RETURNING` that claims them:
+
+```ts
+export async function claimJobs(pool: Pool, options: ClaimOptions): Promise<Job[]> {
+  const { queues, batchSize, workerId } = options;
+
+  const result = await pool.query<JobRow>(
+    `with claimed as (
+       select id from jobs
+       where status = 'pending' and run_at <= now() and queue = any($1)
+       order by priority desc, run_at
+       limit $2
+       for update skip locked
+     )
+     update jobs
+     set status = 'processing', locked_by = $3, locked_at = now(), attempts = attempts + 1
+     from claimed
+     where jobs.id = claimed.id
+     returning jobs.*`,
+    [queues, batchSize, workerId]
+  );
+
+  return result.rows.map(mapJobRow);
+}
+```
+
+`SKIP LOCKED` is what makes this safe with multiple workers polling the same queue — a row another transaction already has locked just gets skipped instead of blocking the whole claim. Verified it under real concurrency in an integration test: two workers claiming from the same 20-row batch never receive overlapping job IDs.
+
+## Dedupe by returning the existing job, not throwing
+
+`jobs_dedupe_inflight` is a partial unique index on `(type, payload_hash) where status in ('pending', 'processing')`, so the same logical job can't be enqueued twice while one's already in flight. The open question was what `enqueue()` should *do* when that index rejects an insert. ADR 0004 settles it: return the existing job instead of making every caller catch a Postgres unique-violation error.
+
+```ts
+export async function enqueue(
+  pool: Pool,
+  type: string,
+  payload: unknown,
+  options: EnqueueOptions = {}
+): Promise<EnqueueResult> {
+  // ...
+  try {
+    const result = await pool.query<JobRow>(
+      `insert into jobs (type, queue, priority, payload, run_at, max_attempts)
+       values ($1, $2, $3, $4, coalesce($5, now()), $6)
+       returning *`,
+      [type, queue, priority, payloadJson, runAt, maxAttempts]
+    );
+    return { job: mapJobRow(result.rows[0]), deduped: false };
+  } catch (err) {
+    if (isUniqueViolation(err, "jobs_dedupe_inflight")) {
+      const existing = await findInFlightDuplicate(pool, type, payloadJson);
+      if (existing) return { job: existing, deduped: true };
+    }
+    throw err;
+  }
+}
+```
+
+The lookup re-derives the payload hash with the same `encode(sha256((type || payload::text)::bytea), 'hex')` expression Postgres uses for the generated column, rather than recomputing it in JS — `JSON.stringify`'s output and `jsonb`'s canonical text form aren't guaranteed to agree on key order or whitespace, and the lookup has to match whatever Postgres actually stored, not whatever JS thinks it stored.
+
+## The flaky test that wasn't about pools at all
+
+Integration tests were intermittently failing in a way that made no sense: a job would get inserted, its own `RETURNING *` would confirm it, and then it would fail to be claimed moments later — no stuck "idle in transaction" session in `pg_stat_activity`, one physical connection in use, nothing to explain it. First fix was switching the `Pool` lifecycle from one-per-file (`beforeAll`/`afterAll`) to one-per-test (`beforeEach`/`afterEach`), plus forcing `--no-file-parallelism` on the CLI instead of trusting Vitest 3's `test.projects` config to propagate it. Both stuck around as standing practice, but neither was the actual cause.
+
+The real bug was in `enqueue()`: `runAt` defaulted to `new Date()` — the application's clock — and got passed straight into the insert, overriding the column's own `default now()`. The claim query filters `run_at <= now()` using Postgres's clock. Measured skew between the host and the `postgres_test` container was small, sub-millisecond to about 17ms, but non-zero and could point either direction. That's enough for a job enqueued and claimed back-to-back to occasionally get a `run_at` fractionally ahead of the DB's `now()` at claim time — a freshly-inserted "immediate" job silently unclaimable for a few milliseconds, which is exactly the kind of can't-reproduce-in-isolation flake that burns an afternoon.
+
+The fix is to stop stamping `run_at` from JS entirely when the caller wants "now":
+
+```ts
+// Pass null (not `new Date()`) when the caller has no explicit runAt, so Postgres's own
+// `default now()` stamps the row using the same clock the claim query's `now()` reads from.
+const runAt = options.runAt ?? null;
+```
+
+paired with `coalesce($5, now())` in the insert. Explicit future `runAt` values for real scheduling still pass through unchanged — minutes-scale schedules don't care about millisecond clock skew, only "claim me right now" does. One clock deciding claimability instead of two.
+
+## Two TOCTOU races Copilot's review caught
+
+`failJob` originally did a `SELECT` to check the job was still locked by the calling worker, then an `UPDATE ... WHERE id = $1` with no re-check. Between those two statements, a reaper reclaiming the job — or another worker taking it over — could get silently clobbered: the `UPDATE` would still hit the row and overwrite whoever's lock was actually there now. Fix moves the check into the `UPDATE`'s own `WHERE` clause instead of trusting the earlier `SELECT`:
+
+```ts
+const result = await pool.query<JobRow>(
+  `update jobs
+   set status = $4,
+       run_at = case when $4 = 'pending' then now() + ($5 || ' milliseconds')::interval else run_at end,
+       last_error = $6,
+       locked_by = null,
+       locked_at = null
+   where id = $1 and locked_by = $2 and status = $3
+   returning *`,
+  [jobId, workerId, "processing", willRetry ? "pending" : "dead", delayMs, errorMessage]
+);
+
+if (result.rows.length === 0) {
+  throw new Error(
+    `Cannot fail job ${jobId}: lock changed concurrently (no longer processing under worker ${workerId})`
+  );
+}
+```
+
+Zero rows back now means the lock changed underneath us, and that's a thrown error instead of a silent no-op that looks like success.
+
+The second one was smaller: `claimJobs`'s `UPDATE ... FROM ... RETURNING` doesn't guarantee the CTE's `ORDER BY` survives into the output rows, even though the CTE itself orders by `priority desc, run_at`. Callers rely on that ordering, so it's now re-sorted explicitly after the query returns instead of assumed:
+
+```ts
+return result.rows
+  .map(mapJobRow)
+  .sort((a, b) => b.priority - a.priority || a.runAt.getTime() - b.runAt.getTime());
+```
+
+Also fixed the payload-size guard while addressing the same review: it was rejecting `size > MAX_PAYLOAD_BYTES` when the DB constraint is strictly less-than, so a payload exactly at the limit would pass the app check and then blow up on insert. Now it's `>=`, with unit tests pinning both the exact-boundary and one-byte-under cases.
+
+Good first day for a project — scaffolded, core mechanics working under real concurrency, and the two nastiest bugs (a silent clock race and two TOCTOU windows) both caught before this ever needs to survive production traffic.
