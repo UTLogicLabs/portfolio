@@ -1,0 +1,63 @@
+---
+title: "An ERESOLVE That Only npm ci Could See"
+date: "2026-07-13"
+description: "Scaffolding shared-tab-sync on Cloudflare Workers went fine locally — until CI's npm ci hit a wrangler/workers-types peer conflict npm install had been quietly resolving around."
+tags: ["cloudflare", "npm", "react-router", "devops"]
+featured: false
+---
+
+Started `shared-tab-sync` today — a real-time shared tab board, React Router v7 on Cloudflare Workers, Durable Objects for room state, D1 for the directory. Scaffold went in clean, `npm install` was happy, `vite dev` ran fine. Then CI ran `npm ci` and fell over on install, before a single test even got a chance to run.
+
+## Same lockfile, different resolver
+
+`npm install` and `npm ci` are supposed to produce the same tree from the same `package-lock.json`. In practice, `npm ci` is stricter — it refuses to silently pick a version that doesn't satisfy every peer range, where `npm install` will sometimes paper over the conflict by deduping to whatever it resolved first. That's exactly the gap here: `npm install` had picked a `wrangler` version and moved on. `npm ci` looked at the same lockfile, checked peer ranges properly, and refused.
+
+The scaffold had pinned versions like this:
+
+```json
+"@cloudflare/vite-plugin": "^1.42.1",
+"@cloudflare/workers-types": "^5.20260708.1",
+"wrangler": "^4.110.0"
+```
+
+`@cloudflare/vite-plugin` depends on a specific `wrangler` internally to spin up a local `workerd` process for `vite dev`. That internal wrangler has its own `@cloudflare/workers-types` peer range, and it didn't overlap with `^5.20260708.1` — it wanted a `4.x` line. `@react-router/cloudflare` had opinions on the workers-types range too. Three packages, three peer ranges on the same dependency, and `npm install` had been quietly landing on a version that satisfied `@react-router/cloudflare` while leaving the vite-plugin's internal wrangler unsatisfied — which never mattered until `npm ci` insisted on both being true at once.
+
+## Pinning to what the plugin actually uses
+
+The fix was to stop asking two different tools to agree on a floating range and just match the vite-plugin's own resolved wrangler exactly:
+
+```diff
+-    "@cloudflare/workers-types": "^5.20260708.1",
++    "@cloudflare/workers-types": "^4.20260617.1",
+...
+-    "wrangler": "^4.110.0"
++    "wrangler": "4.103.0"
+```
+
+`4.103.0` (no caret) is the exact version `@cloudflare/vite-plugin@1.42.1` resolves internally. Once the top-level `wrangler` is pinned to that, its `workers-types` peer range and the top-level `workers-types` version can actually agree — dropping to the `4.x` line satisfies everyone instead of splitting the difference.
+
+## Two more that fell out of the same investigation
+
+Chasing the peer conflict surfaced two adjacent problems that had been dormant:
+
+`workers/app.ts` was reading `process.env.NODE_ENV` to pick React Router's render mode. That's a Node global, and Workers don't run Node — it works under `vite dev` because Vite's dev server shims `process.env`, but it's the wrong API for a Worker runtime:
+
+```diff
+-const handler = createRequestHandler({ build, mode: process.env.NODE_ENV });
++const handler = createRequestHandler({ build, mode: import.meta.env.MODE });
+```
+
+`import.meta.env.MODE` is Vite's own mode variable, statically replaced at build time — no Node shim required, and it works the same in `wrangler dev` as it does in `vite dev`.
+
+And `preview` had been calling `wrangler pages dev`, left over from copying the portfolio's scripts before remembering this project isn't a Pages deploy:
+
+```diff
+-    "preview": "wrangler pages dev",
++    "preview": "wrangler dev",
+```
+
+Small thing, but it would've quietly done nothing useful the first time anyone ran `npm run preview`.
+
+## Why this didn't show up sooner
+
+`npm install` locally masked the conflict for the entire scaffolding session — every command that mattered (`vite dev`, typecheck, tests) ran against whatever tree `install` had already settled on, so nothing looked wrong. The first `npm ci` run is CI's, not a developer's laptop. Worth remembering for the next scaffold: run `npm ci` locally before pushing, not just `npm install` — it's the only one of the two that actually enforces the peer graph everyone else depends on.
