@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { formatDate } from "~/utils/formatDate";
 
 interface ContentCardProps {
   to: string;
@@ -18,11 +19,7 @@ export default function ContentCard({ to, title, description, date, readTime, ta
       {date && (
         <div className="text-sm text-muted-foreground mb-1">
           <time>
-            {new Date(date).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+            {formatDate(date)}
           </time>
           {readTime != null && <> · {readTime} min read</>}
         </div>

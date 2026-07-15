@@ -4,6 +4,7 @@ import type { AppLoadContext } from "react-router";
 import type { ComponentType } from "react";
 import type { Route } from "./+types/blog.$slug";
 import { readTime } from "~/utils/readTime";
+import { formatDate } from "~/utils/formatDate";
 import { resolvePost } from "~/utils/blogSlug";
 import { getPrisma } from "~/db.server";
 import { buildCommentTree } from "~/utils/comments";
@@ -117,11 +118,7 @@ export default function BlogPost({
       <header className="mb-12">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <time>
-            {new Date(frontmatter.date).toLocaleDateString("en-US", {
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
+            {formatDate(frontmatter.date)}
           </time>
           <span>· {minutes} min read</span>
         </div>
