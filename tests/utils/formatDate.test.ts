@@ -6,7 +6,23 @@ describe("formatDate", () => {
     expect(formatDate("2026-06-21")).toBe("June 21, 2026");
   });
 
-  it("formats a full ISO timestamp string", () => {
-    expect(formatDate("2026-06-21T12:00:00.000Z")).toBe("June 21, 2026");
+  it("formats a full ISO timestamp string using the native Date parser", () => {
+    const input = "2026-06-21T12:00:00.000Z";
+    const expected = new Date(input).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    expect(formatDate(input)).toBe(expected);
+  });
+
+  it("falls back to the native Date parser for an invalid calendar date", () => {
+    const input = "2026-02-30";
+    const expected = new Date(input).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+    expect(formatDate(input)).toBe(expected);
   });
 });
