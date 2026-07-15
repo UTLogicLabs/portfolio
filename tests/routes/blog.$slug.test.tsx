@@ -160,8 +160,9 @@ describe("BlogPost component", () => {
   const loaderData = {
     frontmatter: {
       title: "Hello, World",
-      // Noon UTC keeps toLocaleDateString on June 21 in all timezones ±11h
-      date: "2026-06-21T12:00:00.000Z",
+      // Date-only string, as real frontmatter provides it — regression
+      // coverage for the UTC-midnight-parsing off-by-one-day bug.
+      date: "2026-06-21",
       description: "The first post on this blog — why I built this site.",
     },
     slug: "2026-06-21-hello-world",

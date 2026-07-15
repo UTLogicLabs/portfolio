@@ -49,6 +49,11 @@ describe("ContentCard", () => {
     expect(screen.queryByRole("list", { name: /tags/i })).toBeNull();
   });
 
+  it("renders a date-only string without shifting to the previous day", async () => {
+    renderCard({ to: "/blog/post", title: "Post", description: "desc", date: "2026-06-21" });
+    expect(await screen.findByText("June 21, 2026")).toBeInTheDocument();
+  });
+
   it("card link has h-full class for equal-height grid cells", async () => {
     renderCard({ to: "/projects/foo", title: "Foo", description: "desc" });
     const link = await screen.findByRole("link", { name: /Foo/i });
