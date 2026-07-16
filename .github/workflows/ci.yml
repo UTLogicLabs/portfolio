@@ -13,21 +13,27 @@ jobs:
     name: Detect changed paths
     runs-on: ubuntu-latest
     outputs:
-      non_content: ${{ steps.filter.outputs.non_content }}
+      non_content: ${{ steps.check.outputs.non_content }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Filter paths
-        uses: dorny/paths-filter@v3
-        id: filter
         with:
-          filters: |
-            non_content:
-              - '!content/**'
+          fetch-depth: 0
+
+      - name: Check for changes outside content/
+        id: check
+        run: |
+          CHANGED=$(git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")
+          echo "Changed files:"
+          echo "$CHANGED"
+          if echo "$CHANGED" | grep -qv '^content/'; then
+            echo "non_content=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "non_content=false" >> "$GITHUB_OUTPUT"
+          fi
 
   ci:
-    name: Typecheck · Lint · Test · Build · E2E
+    name: ${{ needs.changes.outputs.non_content == 'true' && 'Typecheck · Lint · Test · Build · E2E' || 'Build (content-only)' }}
     needs: changes
     runs-on: ubuntu-latest
 
