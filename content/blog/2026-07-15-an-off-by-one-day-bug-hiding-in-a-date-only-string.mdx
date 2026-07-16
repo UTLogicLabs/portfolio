@@ -1,0 +1,114 @@
+---
+title: "An Off-By-One-Day Bug Hiding in a Date-Only String"
+date: "2026-07-15"
+description: "Blog post dates were rendering a day early in the portfolio's own timezone. The fix on branch fix/blog-date-timezone-shift was quick — the harder part was noticing the fix let invalid dates roll over silently instead of failing loudly."
+tags: ["typescript", "react-router", "testing", "dates"]
+featured: false
+---
+
+Noticed the portfolio itself had a bug in its own blog: post dates on `ContentCard` and the post page were showing a day earlier than the frontmatter said. `2026-06-21` in the `.mdx` file was rendering as June 20. Small, but the kind of small that erodes trust in every other date on the site.
+
+## Why a date-only string shifts back a day
+
+Both spots did the same thing:
+
+```ts
+new Date(dateString).toLocaleDateString("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+});
+```
+
+`new Date("2026-06-21")` doesn't parse that as "June 21st, whatever timezone you're in" — the ISO 8601 date-only form is defined to parse as UTC midnight. `toLocaleDateString()` then renders that instant in the local timezone. In any negative UTC offset (Mountain Time included), midnight UTC on the 21st is still the evening of the 20th locally. The date never had a time component in the source of truth — frontmatter is just `YYYY-MM-DD` — but the round trip through `Date` silently invented one and then translated it into a timezone the string was never scoped to.
+
+The fix is a small `formatDate` util that detects the date-only shape and builds the `Date` from local year/month/day components instead of handing the string to the UTC-anchored parser:
+
+```ts
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+export function formatDate(dateString: string): string {
+  const date = DATE_ONLY.test(dateString)
+    ? new Date(
+        Number(dateString.slice(0, 4)),
+        Number(dateString.slice(5, 7)) - 1,
+        Number(dateString.slice(8, 10)),
+      )
+    : new Date(dateString);
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+```
+
+`new Date(year, monthIndex, day)` constructs at local midnight, not UTC midnight, so there's no offset left to shift anything. Swapped it in for both call sites:
+
+```diff
+-          <time>
+-            {new Date(date).toLocaleDateString("en-US", {
+-              year: "numeric",
+-              month: "long",
+-              day: "numeric",
+-            })}
+-          </time>
++          <time>{formatDate(date)}</time>
+```
+
+Same change in `blog.$slug.tsx`. Anything that still passes a full ISO timestamp (with an actual time component) falls through to the original `new Date(dateString)` branch unchanged — the bug was specific to the date-only shape, not to `Date` parsing in general.
+
+Caught a test that had been quietly working around the bug rather than catching it: `blog.$slug.test.tsx` was passing `"2026-06-21T12:00:00.000Z"` as the loader's date — noon UTC keeps `toLocaleDateString` on the 21st in every timezone from UTC-11 to UTC+11, which is exactly wide enough to never fail locally but also exactly wide enough to never test what real frontmatter looks like. Changed it to a bare `"2026-06-21"`, which is what the loader actually receives in production.
+
+## The fix's own edge case
+
+Constructing `Date` from local Y/M/D components fixes the shift, but it trades one problem for a quieter one: `Date`'s constructor doesn't reject out-of-range values, it rolls them over. `new Date(2026, 1, 30)` — February 30th — doesn't throw, it just becomes March 2nd. Before the fix, a typo'd frontmatter date like that would at least parse through the UTC path and produce *something* recognizably date-shaped. After the fix, it would silently roll over to a wrong-but-plausible date with zero signal that the frontmatter was bad.
+
+Added a round-trip check and a fallback to the native parser when it fails:
+
+```ts
+function parseDateOnly(dateString: string): Date | null {
+  const year = Number(dateString.slice(0, 4));
+  const month = Number(dateString.slice(5, 7));
+  const day = Number(dateString.slice(8, 10));
+  const date = new Date(year, month - 1, day);
+
+  const isValid =
+    date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day;
+
+  return isValid ? date : null;
+}
+
+export function formatDate(dateString: string): string {
+  const date = (DATE_ONLY.test(dateString) && parseDateOnly(dateString)) || new Date(dateString);
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+```
+
+If the constructed date doesn't report back the exact year/month/day it was given, it rolled over, so the value gets handed to `new Date(dateString)` instead — which for a malformed date-only string just produces `Invalid Date`, and an `Invalid Date` rendering as "Invalid Date" in the UI is a far better failure mode than a confidently wrong March 2nd. Silent corruption becomes an obviously broken date, which is the whole point of validating frontmatter in the first place.
+
+Also went back and de-flaked the ISO-timestamp test properly instead of hard-coding an expected string:
+
+```ts
+it("formats a full ISO timestamp string using the native Date parser", () => {
+  const input = "2026-06-21T12:00:00.000Z";
+  const expected = new Date(input).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  expect(formatDate(input)).toBe(expected);
+});
+```
+
+Computing `expected` from the same parser the implementation uses means the test asserts the behavior is consistent, not that it matches a specific string that happened to be correct on whatever timezone wrote the test.
+
+## Takeaway
+
+The first commit fixed the bug users could see. The second one fixed a bug the first commit introduced and nobody would have seen until a typo in some future post's frontmatter rendered as a wrong date instead of an error. Worth the extra half hour — validating the round trip instead of trusting the constructor is the difference between "obviously broken, fix the frontmatter" and "quietly wrong, discovered whenever someone happens to notice."
