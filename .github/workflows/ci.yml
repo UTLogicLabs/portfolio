@@ -33,7 +33,7 @@ jobs:
           fi
 
   ci:
-    name: ${{ needs.changes.outputs.non_content == 'true' && 'Typecheck · Lint · Test · Build · E2E' || 'Build (content-only)' }}
+    name: Typecheck · Lint · Test · Build · E2E
     needs: changes
     runs-on: ubuntu-latest
 
@@ -49,6 +49,10 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Report content-only fast path
+        if: needs.changes.outputs.non_content != 'true'
+        run: echo "### Content-only PR — running install + build only, skipping typecheck/lint/test/E2E" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Generate Prisma client
         if: needs.changes.outputs.non_content == 'true'
