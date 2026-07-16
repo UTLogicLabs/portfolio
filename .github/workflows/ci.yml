@@ -9,8 +9,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      non_content: ${{ steps.filter.outputs.non_content }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Filter paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            non_content:
+              - '!content/**'
+
   ci:
     name: Typecheck · Lint · Test · Build · E2E
+    needs: changes
     runs-on: ubuntu-latest
 
     steps:
@@ -27,27 +45,34 @@ jobs:
         run: npm ci
 
       - name: Generate Prisma client
+        if: needs.changes.outputs.non_content == 'true'
         run: npm run db:generate
 
       - name: Generate React Router types
+        if: needs.changes.outputs.non_content == 'true'
         run: npx react-router typegen
 
       - name: Generate Wrangler types
+        if: needs.changes.outputs.non_content == 'true'
         run: npx wrangler types
 
       - name: Typecheck
+        if: needs.changes.outputs.non_content == 'true'
         run: npm run typecheck
 
       - name: Lint
+        if: needs.changes.outputs.non_content == 'true'
         run: npm run lint
 
       - name: Unit & component tests
+        if: needs.changes.outputs.non_content == 'true'
         run: npm run test
 
       - name: Build
         run: npm run build
 
       - name: Write E2E environment vars
+        if: needs.changes.outputs.non_content == 'true'
         run: |
           cat > .dev.vars <<'EOF'
           TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
@@ -56,16 +81,19 @@ jobs:
           EOF
 
       - name: Initialise local D1 schema
+        if: needs.changes.outputs.non_content == 'true'
         run: npm run db:migrate:apply:local
 
       - name: Install Playwright browsers
+        if: needs.changes.outputs.non_content == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: E2E tests
+        if: needs.changes.outputs.non_content == 'true'
         run: npm run test:e2e
 
       - name: Upload Playwright report
-        if: failure()
+        if: failure() && needs.changes.outputs.non_content == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
