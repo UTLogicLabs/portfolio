@@ -1,0 +1,115 @@
+---
+title: "A Duplicate-Name Check Scoped One Level Too Wide"
+date: "2026-07-16"
+description: "check_customer_window_name was matching duplicate window names across every window set at an address, not just the one being edited. Fixing it meant touching the Postgres function, every Node caller, and the two React components that never passed the right id in the first place."
+tags: ["postgres", "node", "react", "backend", "bugfix"]
+featured: false
+---
+
+Spent most of today on `check_customer_window_name` — the function that stops a customer from getting two windows named "Living Room" in the same proposal. Except it wasn't checking "the same proposal," it was checking "the same address," which meant a name used in one window set would falsely block reuse in a completely different window set for the same customer. Found it while poking at an unrelated report, and it touched three repos before it was actually fixed.
+
+## The scope was one join too wide
+
+The Postgres function took `_address_id`, not `_window_set_id`:
+
+```sql
+-- before
+CREATE OR REPLACE FUNCTION public.check_customer_window_name(_address_id uuid, _window_name character varying)
+RETURNS TABLE(room_label character varying)
+LANGUAGE sql AS $$
+    SELECT ng_window.window_name
+    FROM window_set, ng_window
+    WHERE ng_window.window_set_id = window_set.window_set_id
+      AND window_set.address_id = _address_id
+      AND LOWER(ng_window.window_name) = LOWER(_window_name);
+$$;
+```
+
+An address can have several window sets — one per proposal revision, one per room grouping, whatever the sales flow produces that day. This query didn't care which one it was matching against, it just checked every window ever created at that address. Rename a window to something already used two proposals ago at the same address, and the API rejects it as a duplicate even though nothing in the current window set conflicts.
+
+The fix drops the join and filters on `window_set_id` directly:
+
+```sql
+CREATE OR REPLACE FUNCTION public.check_customer_window_name(_window_set_id uuid, _window_name character varying)
+RETURNS TABLE(room_label character varying)
+LANGUAGE sql AS $$
+    SELECT ng_window.window_name
+    FROM ng_window
+    WHERE ng_window.window_set_id = _window_set_id
+      AND LOWER(ng_window.window_name) = LOWER(_window_name);
+$$;
+```
+
+`insert_window`'s stored procedure already had `_window_set_id` as an argument — it was just handing `_address_id` to the duplicate check instead of the id it already had in scope. One-line fix there once the function signature changed.
+
+## Every Node caller was threading the wrong id
+
+`window_set_id` isn't a new concept in the API, so this wasn't a schema change cascading through the app — it was four controllers that had all copied the same `address_id` param forward without questioning it:
+
+```js
+// customer_data.js — before
+const jsonData = {
+  address_id: req.body.address_id,
+  window_name: req.body.window_name.trim().replace(/^\s+|\s+$|\s+(?=\s)/g, ''),
+};
+```
+
+```js
+// customer_data.js — after
+const jsonData = {
+  window_set_id: req.body.window_set_id,
+  window_name: req.body.window_name.trim().replace(/^\s+|\s+$|\s+(?=\s)/g, ''),
+};
+```
+
+Same swap in `check_duplicate_window`, `window_set_detailed_data.js`'s `isDuplicateWindowName`, and `window_sets_data.js`'s own `isDuplicateWindowName` (two different functions, same name, in two different controllers — worth a rename at some point, not today). `windows_data.js`'s `update_window_name` didn't even have the id available in its `jsonData` yet:
+
+```js
+jsonData.additional_sku_test = window.additional_sku;
+jsonData.window_set_id = window.window_set_id;
+```
+
+`window.window_set_id` was already sitting right there on the row being updated. Nobody had wired it through because the duplicate check had never surfaced an obviously wrong result before — false positives on renames are easy to write off as "just rename it something else" rather than investigate.
+
+## The React side wasn't passing it either
+
+Two spots in `client` call the rename endpoint, and neither was sending `window_set_id` because the prop didn't exist yet:
+
+```jsx
+// ProposalWindowCovering.jsx
+<EditProposalWindowName
+  window_name={proposalState?.window_name}
+  customer_id={proposalState.customerdata.customer_id}
+  address_id={proposalState.customerdata.address_id}
+  window_set_id={proposalState.customerdata.window_set_id}
+  window_id={proposalState.window_ids[0]}
+  closeDrawer={closeWindowNameUpdateDrawer}
+/>
+```
+
+```jsx
+// EditProposalWindowName.jsx
+const EditProposalWindowName = ({
+  window_name,
+  window_id,
+  customer_id,
+  address_id,
+  window_set_id,
+  closeDrawer,
+}) => {
+  // ...
+  await axios.patch(`/windows/${window_id}/name`, {
+    window_name: windowName,
+    customer_id: customer_id,
+    address_id: address_id,
+    window_set_id: window_set_id,
+  });
+```
+
+`proposalState.customerdata` already carried `window_set_id` — same pattern as the backend, the value existed one level up the whole time, it just never got destructured and passed down.
+
+## Cleaned up a table while I was in there
+
+Separately, noticed `WindowSetTable` was rendering `window-config` and `vertical-config` columns that the current `WindowForm` drawer flow doesn't collect anymore, so they either showed a stale default or sat blank. Dropped both columns and made `window_sill` show for all window types instead of gating it to Shutters only — no reason a sill measurement should be shutter-specific.
+
+Four repos (Postgres migration, `server`, `client`, and a schema tweak) for what reads as a one-line bug: wrong id passed to a WHERE clause. The actual work was tracing that one id backward through every layer that forwards it without checking it, since none of them would throw on a wrong id — they'd just silently produce a too-broad, technically-valid answer.
