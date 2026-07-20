@@ -1,0 +1,75 @@
+---
+title: "A Silent Seed Container Hiding Behind Four Broken E2E Tests"
+date: "2026-07-17"
+description: "Rebuilt the customer profile page, then spent the rest of the day chasing E2E failures one at a time back to a docker compose command that swallowed a seed container's exit code."
+tags: ["testing", "playwright", "docker", "mssql", "ci"]
+featured: false
+---
+
+Shipped the actual feature before 9am — a real customer profile page in `sales-app` to replace the placeholder — and then spent most of the rest of the day playing whack-a-mole with the E2E suite it broke. Four fixes, each one uncovering the next, all traceable back to a single silently-failing Docker container in CI.
+
+## The rebuild
+
+`/customers/:id` used to be a bare placeholder. Today it became a real page: header, addresses/phones/emails as accordion sections with table rows and drawer edit forms, proposals/sales-orders tables, stub sections for window sets and appointments waiting on backend support. Alongside it, a shared `Alert`/`AlertDialog` component pair with a severity → color/icon mapping, positioned top-fixed in the viewport, wired into `useDispatchAlert`.
+
+None of that mattered for what came next — what mattered is that the old markup was plain links ("edit", "Add phone", "Add email") and the new markup is icon buttons with `aria-label`s, plus phone/email rows moved from a list into a `Table`. The E2E suite still expected the old DOM.
+
+## Test suite dies at the login step, not the new page
+
+First fix wasn't even about the UI. `customer.spec.ts` needs a seeded customer to exist, and every test in the file timed out after page load — before touching any of the new markup. The seed container in `docker-compose.test.yml`:
+
+```yaml
+mssql-test-init:
+  image: mcr.microsoft.com/mssql-tools
+  ...
+  entrypoint: >
+    /bin/bash -c "
+    /opt/mssql-tools/bin/sqlcmd -S mssql-test -U sa -P \"$${TEST_MSSQL_SA_PASSWORD:-TestPass123!}\" -C -i /fixtures/01-schema.sql &&
+    /opt/mssql-tools/bin/sqlcmd -S mssql-test -U sa -P \"$${TEST_MSSQL_SA_PASSWORD:-TestPass123!}\" -C -i /fixtures/02-seeds.sql
+    "
+```
+
+was using the legacy `mssql-tools` image, whose older `sqlcmd`/OpenSSL fails TLS negotiation against `mssql/server:2022-latest`. It was failing every run. Nobody noticed because the CI step running it was:
+
+```yaml
+- run: docker compose -f docker-compose.test.yml up mssql-test-init
+```
+
+`docker compose up` on a one-shot container doesn't propagate that container's exit code — it exits 0 as long as compose itself didn't error, regardless of whether the seed script inside actually ran. So the seed silently failed, every `customer.spec.ts` test depending on the fixture broke across all browsers, and CI kept reporting green up until the actual test assertions.
+
+Fix was three parts: point the init container at the same image the healthcheck already trusts (`mssql/server:2022-latest` bundles `mssql-tools18` at `/opt/mssql-tools18/bin/sqlcmd` — there's no published `mssql-tools18`-only image), and make CI actually observe the exit code:
+
+```yaml
+- run: docker compose -f docker-compose.test.yml up --exit-code-from mssql-test-init mssql-test-init
+```
+
+Threw in a `vitest.config.ts` fix while in there too — coverage's `v8` provider defaults to sweeping the whole project root, which without scoping was counting `build/`, `docs/`, and config files as "0% uncovered." Scoped it to `include: ["app/**"]`.
+
+## Three more symptoms, one at a time
+
+With the seed actually landing, the suite could get past login — and then failed three more times, each a different shape:
+
+**Wrong name match.** The seeded customer's spouse name ("Wife") now actually renders, so `CustomerPageHeader`'s `fullName` shows "Seth & Eliza Pace" instead of just "Seth Pace." The exact `/Seth Pace/` regex the tests used for the profile heading stopped matching (the search-results link, which shows only first/last name, still matched fine — so this one only broke on the profile page itself):
+
+```ts
+await expect(page.getByRole("heading", { name: /Seth.*Pace/ })).toBeVisible();
+```
+
+**Stale selectors.** The actual rebuild markup mismatch — plain `getByRole("link", { name: "edit" })` swapped for `getByRole("button", { name: /^Edit address/ })`, `"Add phone"` for `"Add New Phone"`, list items for table rows:
+
+```ts
+await page
+  .getByRole("row", { name: /\(801\) 555-1234/ })
+  .getByRole("button", { name: /^Edit phone/ })
+  .click();
+```
+
+**Collapsed accordions.** `CollapsibleSection` defaults to collapsed unless `defaultExpanded` is passed. `AddressesSection` opts in; `PhonesSection` and `EmailsSection` don't. So their "Add New X" buttons and existing rows weren't in the accessibility tree until the header was clicked — an easy one to miss since Addresses (the first section on the page) worked fine in isolation:
+
+```ts
+// Unlike Addresses, the Phone Numbers section isn't expanded by default.
+await page.getByRole("button", { name: /Phone Numbers/ }).click();
+await page.getByRole("button", { name: "Add New Phone" }).click();
+```
+
+Four fixes, one root cause underneath the first: `docker compose up` on a one-shot init container will lie to you about whether it worked, and it takes a real page rebuild landing on top of it to notice.
