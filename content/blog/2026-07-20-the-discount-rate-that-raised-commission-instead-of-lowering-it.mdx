@@ -1,0 +1,126 @@
+---
+title: "The Discount Rate That Raised Commission Instead of Lowering It"
+date: "2026-07-20"
+description: "Copilot's PR review flagged a sign inversion in the commission math, a bind param that fell off the end of a SQL insert, and a batch of copy-pasted validation gaps across factory-dashboard's station routes — all in one day, across two apps."
+tags: ["typescript", "postgres", "code-review", "bugfix"]
+featured: false
+---
+
+Spent today working through Copilot's review findings on two open PRs — one in `sales-app`, one in `factory-dashboard` — instead of writing new features. Most of it was the boring-but-necessary kind of fix, except for one: a sign error in the commission math that made discounts pay salespeople *more*, not less.
+
+## The discount math ran backward
+
+`applyWindowPricing` calls `calculateCommission(rate, commissionList)`, where the convention (documented right there in `calculate-commission.server.ts`) is positive rate = upcharge, moves toward `max`; negative rate = discount, moves toward `min`. The caller was passing the raw discount percentage, unnegated:
+
+```ts
+// before
+const commissionRate = calculateCommission(
+  input.discountRate / 100,
+  commissionList,
+);
+```
+
+A positive `discountRate` went into the `rate > 0` branch, which pushes the result *toward max*. So applying a discount moved commission up, not down — backward from what the function's own contract says a discount rate should do. Fix is one character, the negation:
+
+```ts
+// after
+// calculateCommission's convention is positive rate = upcharge (raises
+// commission toward max), negative rate = discount (lowers commission
+// toward min) — negate the discount percentage to match.
+const commissionRate = calculateCommission(
+  -input.discountRate / 100,
+  commissionList,
+);
+```
+
+It surfaced next to a related ordering bug in the test fixtures: `get_commission_list` was sorting `ORDER BY discount_percentage DESC`, which put commission low-to-high instead of high-to-low. `calculateCommission` reads `commissionList.at(0)` as `base` and `.at(-1)` as `min` — with the wrong order those two were swapped. Flipped it to `ASC`, with a comment explaining why ascending discount actually yields descending commission:
+
+```sql
+-- ASC on discount_percentage, not commission: higher discount = lower
+-- commission, so this yields commission high-to-low, matching
+-- calculateCommission's "base = first, min = last" convention.
+ORDER BY discount_percentage ASC;
+```
+
+While in the pricing code, also caught that the `AD` additional-charges rollup in `covering.server.ts` wasn't multiplying by quantity, unlike the accessories/services rollups sitting right next to it:
+
+```sql
+-- before
+SELECT proposal_id, ARRAY_AGG(charge_sku) AS skus, COALESCE(SUM(charge), 0) AS total
+FROM public.proposal_additional_charge WHERE charge_type = 'AD' GROUP BY proposal_id
+
+-- after
+SELECT proposal_id, ARRAY_AGG(charge_sku) AS skus, COALESCE(SUM(charge * quantity), 0) AS total
+FROM public.proposal_additional_charge WHERE charge_type = 'AD' GROUP BY proposal_id
+```
+
+## A bind param that fell off the end
+
+`addWindowToSet`'s insert has thirteen positional params. `sku` was the thirteenth column in the query text but never made it into the params array — it just wasn't there, so Postgres was presumably filling it with whatever default the column has (or erroring, depending on the schema), and the value the caller passed in was silently discarded:
+
+```ts
+[
+  input.windowWidth ?? null,
+  input.measurementTypeSpecificFactor ?? null,
+  nextSeq,
+  input.sku ?? null, // was missing entirely
+],
+```
+
+The existing unit test only asserted that `nextSeq` was "bound last," which was true before this fix and stayed sort-of-true after (second-to-last now) — it just never checked that anything came after it. Added a second test that actually asserts the sku value round-trips:
+
+```ts
+const [, insertParams = []] = mockedPgQuery.mock.calls[1]!;
+expect(insertParams[insertParams.length - 1]).toBe("SKU-1");
+```
+
+Also tightened `pgCallFunction` while touching the same file — it was interpolating `functionName` straight into `SELECT * FROM public.${functionName}(...)`, trusting every caller to only ever pass a bare name. Added a regex guard so anything that isn't `[a-zA-Z_][a-zA-Z0-9_]*` throws instead of producing whatever SQL it happens to produce.
+
+## Same day, different app: the same copy-paste pattern
+
+`factory-dashboard`'s PR got three findings on the motors station route — missing `Color`/`SizeW`/`SizeH` in a `SELECT`, unvalidated `invoice`/`number`/`status` form fields, and an unguarded division in the turnaround metric — and all three turned out to be copy-pasted across every other station and orders route too, since they'd all been built from the same template.
+
+The division one was the most obviously bad in production: `queue / averagePerDay / 4` with no check on `averagePerDay`, so an empty averages window (a new station type with no history yet) would return `Infinity` or `NaN` straight to the dashboard UI. Pulled it into a helper:
+
+```ts
+export function computeTurnAround(
+  queue: number,
+  averagePerDay: number,
+): string {
+  if (!Number.isFinite(averagePerDay) || averagePerDay <= 0) return '0.00';
+  const turnAround = queue / averagePerDay / 4;
+  if (!Number.isFinite(turnAround)) return '0.00';
+  return turnAround.toFixed(2);
+}
+```
+
+Same story for input validation — every station's action handler was reading `invoice`/`number`/`status` off `FormData` and using them directly, no check that `number` was actually a positive integer or that `status` was one of the enum's allowed values. Two small helpers, wired into all eight handlers:
+
+```ts
+export function parsePositiveInt(
+  value: FormDataEntryValue | null,
+): number | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+export function parseEnumValue<T extends string>(
+  value: FormDataEntryValue | null,
+  allowed: readonly T[],
+): T | null {
+  if (typeof value !== 'string') return null;
+  return (allowed as readonly string[]).includes(value) ? (value as T) : null;
+}
+```
+
+Handlers now return 400 on invalid input instead of silently no-opping, which was the actual failure mode before — a bad value wouldn't crash anything, it would just quietly not update the row and leave you wondering why the station board didn't move.
+
+## A bonus bug that wasn't code
+
+Also in the factory-dashboard diff: `docs/architecture.mmd` and `docs/sequenceDiagram.mmd` had somehow picked up 300+ lines of frontmatter above the actual Mermaid content — a `query:` field, a `references:` list of absolute paths on my machine, and a full dump of an agent's skills listing (email best practices, react-email, e2e-testing-patterns, the works). Some prior session's tool output got checked in ahead of the diagram it was supposed to produce, and nobody caught it in review until Copilot did. Stripped both files down to just the diagrams.
+
+## Nothing here needed a redesign
+
+Every one of these was a small, mechanical fix once identified — a negation, a missing array element, a regex guard, a null check. The pattern worth remembering is the "same bug in six routes" one: when a review catches something in the file you're actively touching, it's worth a five-minute grep to see if the same shortcut got pasted everywhere else before the PR closes, not after the next one flags it individually.
