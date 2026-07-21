@@ -34,7 +34,7 @@ describe("admin.login loader", () => {
 
   it("redirects to /admin/comments when already authenticated", async () => {
     const env = makeContext().cloudflare.env;
-    const { getSession, commitSession } = getSessionStorage(env);
+    const { getSession, commitSession } = await getSessionStorage(env);
     const session = await getSession(null);
     session.set("role", "admin");
     const cookie = await commitSession(session);

@@ -22,7 +22,7 @@ const BASE_ENV = {
 };
 
 async function makeAuthenticatedRequest(url: string, init?: RequestInit) {
-  const { getSession, commitSession } = getSessionStorage(BASE_ENV);
+  const { getSession, commitSession } = await getSessionStorage(BASE_ENV);
   const session = await getSession(null);
   session.set("role", "admin");
   const cookie = await commitSession(session);
