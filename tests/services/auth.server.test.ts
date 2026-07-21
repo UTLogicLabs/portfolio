@@ -13,7 +13,7 @@ function makeEnv(overrides: Partial<CloudflareEnv> = {}): CloudflareEnv {
 }
 
 async function adminCookie(env: CloudflareEnv) {
-  const { getSession, commitSession } = getSessionStorage(env);
+  const { getSession, commitSession } = await getSessionStorage(env);
   const session = await getSession(null);
   session.set("role", "admin");
   return commitSession(session);
