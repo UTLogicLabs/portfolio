@@ -32,7 +32,7 @@ export async function action({ request, context }: ActionFunctionArgs & { contex
     return data<ActionData>({ error: "Server is not configured for admin login." }, { status: 500 });
   }
 
-  const { getSession, commitSession } = getSessionStorage(cloudflare.env);
+  const { getSession, commitSession } = await getSessionStorage(cloudflare.env);
   const session = await getSession(request.headers.get("Cookie"));
   session.set("role", "admin");
 

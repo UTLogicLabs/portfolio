@@ -8,7 +8,7 @@ export async function requireAdmin(request: Request, env: CloudflareEnv): Promis
     throw redirect("/admin/login");
   }
 
-  const { getSession } = getSessionStorage(env);
+  const { getSession } = await getSessionStorage(env);
   const session = await getSession(request.headers.get("Cookie"));
 
   if (session.get("role") !== "admin") {
@@ -18,7 +18,7 @@ export async function requireAdmin(request: Request, env: CloudflareEnv): Promis
 
 export async function isAdmin(request: Request, env: CloudflareEnv): Promise<boolean> {
   if (!env.SESSION_SECRET) return false;
-  const { getSession } = getSessionStorage(env);
+  const { getSession } = await getSessionStorage(env);
   const session = await getSession(request.headers.get("Cookie"));
   return session.get("role") === "admin";
 }

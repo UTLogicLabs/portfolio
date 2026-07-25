@@ -1,0 +1,115 @@
+---
+title: "The Constant That Broke React Router's Client Bundle"
+date: "2026-07-24"
+description: "Wired up the window set detail page, fixed two rounds of PR feedback, then broke the production build with the same fix that satisfied Copilot's review comment — because the constant it wanted moved lived in a .server.ts file."
+tags: ["react-router", "typescript", "testing", "ci"]
+featured: false
+---
+
+Four commits today, and the last one is really about the second-to-last one: a fix that passed review, passed CI, and then broke the build anyway, because of where a constant happened to live.
+
+## Wiring up the window set detail page
+
+The big one first. The window set detail screen (`app/routes/window-sets/$windowSetId.tsx`) got its action layout rebuilt — accordion-gated remove/reorder modes, delete dialogs for both the window set and individual windows, note cards, sprite icons, a favicon. It also folds `ReOrderWindowSet.jsx`'s standalone route into an inline sort-mode toggle instead of a separate page, same treatment `DeleteWindow.jsx` already got.
+
+The part worth remembering is the business-rule split. Legacy only checked one thing before letting you delete anything — `getProposalCountByWindowSetId`, which counts against `new_proposal.window_set_id` and gates deleting the *whole set*. That check doesn't say anything about individual windows. So a window set with one window already on a proposal should still let you edit, reorder, or delete its *other* windows freely. That needed a second, per-window check:
+
+```ts
+// Per-window granularity check (proposal_line_item.window_id), distinct
+// from getProposalCountByWindowSetId's whole-set check (new_proposal.
+// window_set_id) — a window set can be reordered/edited freely, but an
+// individual window can't be deleted once it's on a proposal's line items.
+export async function getWindowIdsInProposals(
+  windowIds: string[],
+): Promise<string[]> {
+  if (windowIds.length === 0) return []
+  try {
+    const { rows } = await pgQuery<{ window_id: string }>(
+      `SELECT DISTINCT window_id::text AS window_id
+       FROM public.proposal_line_item
+       WHERE window_id = ANY($1)`,
+      [windowIds],
+    )
+    return rows.map((row) => row.window_id)
+  } catch (error) {
+    // TEMPORARY: public.proposal_line_item hasn't been migrated onto every
+    // environment yet. Until it has, treat "table missing" as "no windows
+    // are on a proposal" rather than 500ing the window set page. Remove
+    // this catch once the migration has landed everywhere.
+    if ((error as { code?: string }).code === "42P01") return []
+    throw error
+  }
+}
+```
+
+The `42P01` catch is a deliberate crutch — `proposal_line_item` exists in some environments and not others mid-migration, and a missing table shouldn't turn into a 500 on a page that has nothing to do with proposals for most users.
+
+## Round one of review feedback: keyboard nav and an unbounded quantity
+
+Copilot's review on the PR flagged two real things: table rows navigated on `onClick` only, so keyboard users couldn't get anywhere, and the "add windows" quantity field had no upper bound — meaning a bulk-add request could trigger unlimited DB round trips (`addWindowToSet` does an insert per unit of quantity, plus a uniqueness check per window).
+
+The row fix is the standard pattern — add `onKeyDown` for Enter/Space alongside the click handler, plus `tabIndex` and `role="button"` so it's actually announced as interactive:
+
+```tsx
+onKeyDown={
+  isClickable
+    ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault()
+          onRowClick(row)
+        }
+      }
+    : undefined
+}
+tabIndex={isClickable ? 0 : undefined}
+role={isClickable ? "button" : undefined}
+```
+
+The quantity cap became `MAX_WINDOW_QUANTITY = 50`, clamped both client-side (the input's `max` and the `onChange` handler) and server-side in the form action, since client-side validation is a UX nicety, not a guarantee. I put the constant in `window-set.server.ts` next to `addWindowToSet` since that's the function it's actually protecting. That placement is what broke the build two commits later.
+
+## CI: a selector that never matched and a coverage gap
+
+Two unrelated CI failures, same commit. `customer.spec.ts` was asserting `getByRole("link", { name: /Seth Pace/ })`, but `customer-results-table.tsx` navigates via a row-click handler, not a real `<a>` — so that selector never matched anything, on any browser. Swapped it for `getByText`.
+
+The other failure was a coverage threshold drop on `app/routes/**` — the reorder/remove/rename/navigate handlers on `$windowSetId.tsx` didn't have component test coverage yet, since they were new this session. Added tests for each, which meant mocking `useNavigate` and every `useFetcher` in the tree:
+
+```tsx
+// jsdom's AbortSignal isn't accepted by undici's Request, which turns a
+// genuine fetcher.submit into an unhandled rejection — so every
+// useFetcher() in this tree gets stubbed rather than exercised for real.
+vi.mock("react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-router")>()
+  return {
+    ...actual,
+    useNavigate: () => navigateSpy,
+    useFetcher: () => ({
+      state: "idle",
+      data: undefined,
+      submit: vi.fn(),
+      Form: ({ children, ...props }: React.ComponentProps<"form">) => (
+        <form {...props}>{children}</form>
+      ),
+    }),
+  }
+})
+```
+
+## The build break: a value import from a `.server` module
+
+Then the build failed. `window-fields-content.tsx` — a client component — imported `MAX_WINDOW_QUANTITY` from `window-set.server.ts`. React Router strips `.server` modules from the client bundle entirely, and that stripping doesn't care whether what you're importing is a function that touches the database or a plain number. Any *value* import from a `.server` file in client code breaks the build, full stop.
+
+It worked fine in review and in every test run because vitest doesn't do that stripping — it happily resolves the import and runs the code. Only the production build enforces the server/client split, which is exactly the kind of gap that lets something like this pass everything except the one check that matters.
+
+Fix was to give the constant a home that both sides can import without crossing the boundary:
+
+```ts
+// window-set.constants.ts
+// Shared with app/features/window-sets/window-fields-content.tsx (client
+// component, hence not in window-set.server.ts — that suffix is stripped
+// from the client bundle, so a value import from it there breaks the
+// server/client split; see
+// https://reactrouter.com/explanation/code-splitting#removal-of-server-code).
+export const MAX_WINDOW_QUANTITY = 50
+```
+
+`window-set.server.ts` now just re-exports it (`export { MAX_WINDOW_QUANTITY }`) so nothing else importing it from the old path has to change. Small fix, but the lesson is the naming convention itself: `.server.ts` isn't just documentation about where code *should* run, it's a build-time boundary, and it applies per-import, not per-file-that-happens-to-also-have-real-server-logic-in-it.

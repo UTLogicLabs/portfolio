@@ -1,0 +1,171 @@
+---
+title: "The required={true} That Leaked Into the DOM"
+date: "2026-07-22"
+description: "Extended sales-app's window-set forms with depth/obstruction/sill fields, which meant finally reconciling the models against the real Postgres schema instead of a stale test fixture — and then chasing down why that same work broke every one of CI's component tests."
+tags: ["typescript", "postgres", "react", "testing", "bugfix"]
+featured: false
+---
+
+Spent most of today on `sales-app`'s window-set forms — adding measurement, depth, obstruction, sill, and panel-configuration fields. That turned into two separate problems: the models underneath were still querying a schema that didn't match production, and the new form JSX broke CI's component tests in a way that took a minute to even see.
+
+## The models were querying a schema that doesn't exist anymore
+
+`covering.server.ts`'s lookup helper assumed every `get_type_*()` Postgres function returns the same `(value, display_sort_order)` shape:
+
+```ts
+// before
+async function getLookupOptions(functionName: string): Promise<LookupOption[]> {
+  const { rows } = await pgCallFunction<{
+    value: string;
+    display_sort_order: number;
+  }>(functionName);
+  return rows.map((r) => ({
+    value: r.value,
+    displaySortOrder: r.display_sort_order,
+  }));
+}
+```
+
+They don't. `get_type_build()` returns `(build_type, sku)`, `get_type_measurement()` returns `(measurement_type, short_code, color_code)` — each function names its own value column, and none of them are called `value`. Fixed it by passing the actual column name in per call site instead of guessing at a shared shape:
+
+```ts
+// after
+async function getLookupOptions(
+  functionName: string,
+  valueColumn: string,
+): Promise<LookupOption[]> {
+  const { rows } = await pgCallFunction<Record<string, string>>(functionName);
+  return rows.map((r) => ({ value: r[valueColumn] }));
+}
+```
+
+Window depth, obstructions, window sill, sill plate, and panel configuration don't have `get_type_*()` functions at all — checked `pg_proc` directly, only the ten original lookups exist there. Legacy's equivalent (`GET /wm/window/options`) queries a `master_sku_list` table for these, which also doesn't exist in this schema. `product_accessory` turned out to be the real analog — same `(sku, type, active, display_sort_order)` shape:
+
+```ts
+async function getSkuOptions(type: string): Promise<SkuOption[]> {
+  const { rows } = await pgQuery<{ sku: string; accessory_name: string }>(
+    `SELECT sku, accessory_name FROM public.product_accessory
+     WHERE type = $1 AND active = true
+     ORDER BY display_sort_order ASC`,
+    [type],
+  );
+  return rows.map((r) => ({ sku: r.sku, skuName: r.accessory_name }));
+}
+```
+
+`proposal.server.ts` had a similar drift — it was writing to `total_retail_price` on `new_proposal`, but that column is just `total` now. And `duplicateProposal`'s insert was still passing measurement fields (`window_height`, `window_width`, `measurement_type_specific_factor`, `sku`) straight into `ng_window`, which doesn't carry them anymore — they live on `window_measurement`, a separate table joined by `window_id`. Split the insert into the `ng_window` columns that are actually still there, then a follow-up call into the new measurement table:
+
+```ts
+const { rows } = await pgQuery<{ windowId: string }>(
+  `INSERT INTO public.ng_window
+     (window_set_id, window_name, build_type, existing_covering, mount_surface,
+      ladder, window_id_seq_number)
+   VALUES ($1, $2, $3, $4, $5, $6, $7)
+   RETURNING window_id::text AS "windowId"`,
+  [/* ... */],
+);
+await upsertWindowMeasurement(rows[0].windowId, {
+  measurementType: window.measurementType ?? undefined,
+  windowHeight: window.windowHeight ?? undefined,
+  windowWidth: window.windowWidth ?? undefined,
+  measurementTypeSpecificFactor:
+    window.measurementTypeSpecificFactor ?? undefined,
+});
+```
+
+Same story in `window-set.server.ts` — `getWindowById` was selecting `measurement_type`/`window_height`/`window_width` straight off `ng_window`, which doesn't have those columns anymore either. Needed a left join to `window_measurement`, plus a couple of columns (`sku`, `discount_rate`) that don't back to anything in the real schema yet, so they're kept as static placeholders so the existing callers still compile against the same `Window` shape:
+
+```ts
+const WINDOW_SELECT = `
+  SELECT w.window_id::text AS "windowId", w.window_set_id::text AS "windowSetId",
+         w.window_name AS "windowName", w.build_type AS "buildType",
+         w.existing_covering AS "existingCovering", w.mount_surface AS "mountSurface",
+         w.ladder, m.measurement_type AS "measurementType",
+         m.window_height AS "windowHeight", m.window_width AS "windowWidth",
+         m.measurement_type_specific_factor::text AS "measurementTypeSpecificFactor",
+         w.window_id_seq_number AS "windowIdSeqNumber",
+         NULL::character varying AS sku, 0::numeric AS "discountRate"
+  FROM public.ng_window w
+  LEFT JOIN public.window_measurement m ON m.window_id = w.window_id
+`;
+```
+
+None of this would've surfaced from reading the TypeScript alone — every one of these required going back to `docs/DATABASE_SCHEMAS.md` (or `pg_proc` directly) and comparing against what the models assumed. The test fixtures had quietly drifted from the real schema, and everything still compiled and passed against the fixtures the whole time.
+
+## A stray string that only showed up in the DOM
+
+Wiring the new fields into `window-fields-content.tsx` left one line behind that shouldn't have been there:
+
+```tsx
+// before
+<SelectField
+  ...
+  options={measurementTypes}
+  required={true}
+/>
+required={true}
+<input
+  type="hidden"
+  name="windowWidth"
+  ...
+```
+
+That second `required={true}` isn't attached to anything — it's a bare JSX expression that evaluates to the boolean `true`, and React renders that as the literal text `"required=true"` sitting between two form fields. It doesn't throw, doesn't lint, and doesn't look wrong in a diff unless you're specifically looking for orphaned lines. CI's component tests caught it because they assert on rendered text content, and `required=true` showing up as a text node was enough to fail the snapshot-style assertions.
+
+While in there, also removed `required` from covering, mount surface, ladder, and window sill — those are nullable per the real schema, so requiring them on the client blocked native form submission any time an existing window (i.e., one being edited) didn't already have a value for one of them. First-run forms with everything blank worked fine; editing a partially-filled window silently couldn't submit.
+
+## Real heading semantics, and CI on every push
+
+Same commit fixed a smaller a11y gap: the create-window-set page's title was rendered as plain text inside a styled `Typography`, with no actual `<h1>` anywhere on the page. `WindowFormLayout` now always wraps `title` in a real heading:
+
+```tsx
+// after
+<Typography color="text.secondary">{description}</Typography>
+<Typography variant="h4" component="h1">
+  {title}
+</Typography>
+```
+
+That freed `new.tsx` up to give the page its own static `<h1>New window set</h1>` for the page's actual title, while the renamable window-set name (a clickable span, not a heading) stays a separate element — plus the create page's buttons finally say "Create window set" / "Create & add another window" instead of the edit page's "Save Window" copy they'd been sharing.
+
+Separately, flipped `.github/workflows/ci.yml` so push events aren't restricted to `main` anymore — lint, unit/component, integration, e2e, and visual regression all now run on every push, not just PRs against main. The build-artifact job is scoped to `if: github.event_name == 'pull_request'` so it doesn't run twice per branch:
+
+```yaml
+on:
+  pull_request:
+  push:
+
+jobs:
+  build:
+    needs: [lint, unit-and-component, integration, e2e, visual-regression]
+    if: github.event_name == 'pull_request'
+```
+
+## Elsewhere: inferring a covering category on the server
+
+Smaller fix in `server` — `convertToWorkOrder`'s additional-charge handoff was looking up a quote number keyed by `covering_category`, but that field isn't always set on the charge. If every window on the order is the same covering type, there's only one sensible value anyway, so it's inferred instead of left null:
+
+```js
+const coveringTypesOnOrder = new Set(
+  salesOrderWindows.map((w) =>
+    w.covering_type === 'Shutters' ? 'Shutters' : 'Blinds',
+  ),
+);
+for (const charge of additionalCharges) {
+  if (!charge.covering_category && coveringTypesOnOrder.size === 1) {
+    charge.covering_category = [...coveringTypesOnOrder][0];
+  }
+}
+```
+
+And a related fallback in the insert itself, so a missing quote number for the *other* covering type doesn't just error out — it falls back to whichever one actually exists:
+
+```js
+additionalCharge.covering_category === 'Shutters' ?
+  (shutters ?? blinds)
+: (blinds ?? shutters),
+```
+
+## The takeaway
+
+The schema drift was the more interesting problem — it's the kind of bug that only shows up when someone actually builds new UI against the models and the fixtures stop being enough cover. The stray `required={true}` was the opposite: a one-line typo that would've been invisible in review if CI's component tests weren't asserting on real rendered output.

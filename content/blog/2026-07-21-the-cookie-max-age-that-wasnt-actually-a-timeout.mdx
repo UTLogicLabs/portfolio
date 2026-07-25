@@ -1,0 +1,118 @@
+---
+title: "The Cookie Max-Age That Wasn't Actually a Timeout"
+date: "2026-07-21"
+description: "The admin session cookie on this site claimed a 7-day lifetime, but Max-Age is just a client-side hint — a captured cookie would stay validly signed forever. Fixed it by deriving the signing secret from a rotating 12-hour time bucket instead."
+tags: ["security", "auth", "cloudflare", "remix", "typescript"]
+featured: false
+---
+
+Went back through this site's own admin login today — the thing that guards `/admin/comments` — and realized the session cookie's 7-day `maxAge` wasn't actually capping anything server-side. It was a suggestion to the browser, not a rule the server enforced.
+
+## Max-Age is the browser's problem, not the server's
+
+`session.server.ts` builds the cookie session storage once, with a single static secret:
+
+```ts
+// before
+export function getSessionStorage(env: CloudflareEnv) {
+  return createCookieSessionStorage<SessionData>({
+    cookie: {
+      name: "__session",
+      secrets: [env.SESSION_SECRET ?? ""],
+      secure: env.ENVIRONMENT !== "development",
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    },
+  });
+}
+```
+
+`maxAge` sets the `Max-Age` attribute on the `Set-Cookie` header. That's a client-side instruction — it tells the browser when to delete the cookie from its jar. It does nothing to the signature. If a cookie ever left the browser it was issued to (logged somewhere, proxied, whatever), it stays validly signed against `SESSION_SECRET` for as long as that secret doesn't change, `Max-Age` or not. Seven days was really "however long until I rotate `SESSION_SECRET` by hand," which in practice meant indefinitely.
+
+## Deriving a rotating secret instead of storing one
+
+Rather than add a session store just to track expiry server-side, I derived the effective signing secret from the real `SESSION_SECRET` plus a time bucket, using HMAC-SHA256 via Web Crypto (this runs on Cloudflare Workers, so no Node `crypto`):
+
+```ts
+const ROTATION_WINDOW_MS = 1000 * 60 * 60 * 12;
+
+async function deriveSecret(baseSecret: string, bucket: number): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(baseSecret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(String(bucket)));
+  return Array.from(new Uint8Array(signature))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+```
+
+`getSessionStorage` now computes the current 12-hour bucket, derives its secret plus the previous bucket's, and hands both to the cookie signer:
+
+```ts
+export async function getSessionStorage(env: CloudflareEnv) {
+  const base = env.SESSION_SECRET;
+  const currentBucket = Math.floor(Date.now() / ROTATION_WINDOW_MS);
+  const secrets = base
+    ? await Promise.all([currentBucket, currentBucket - 1].map((b) => deriveSecret(base, b)))
+    : [""];
+
+  return createCookieSessionStorage<SessionData>({
+    cookie: {
+      name: "__session",
+      secrets,
+      secure: env.ENVIRONMENT !== "development",
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 12,
+    },
+  });
+}
+```
+
+`createCookieSessionStorage` checks a cookie's signature against every secret in the array and re-signs new cookies with `secrets[0]`. Passing `[current, previous]` means a session created near the end of a window still validates on the other side of the boundary — no one gets logged out mid-session just because the clock ticked over — but once a bucket falls two windows behind, its derived secret is never checked again. The effective signing key rotates out from under any captured cookie within 12–24 hours, independent of whatever `Max-Age` says, and `Max-Age` itself dropped from 7 days to 12 hours to match.
+
+## The one-line ripple
+
+`getSessionStorage` went from sync to async (it now awaits `crypto.subtle.importKey`/`sign`), which meant updating every call site:
+
+```ts
+// app/services/auth.server.ts, app/routes/admin.login.tsx
+const { getSession } = await getSessionStorage(env);
+```
+
+Easy to miss one, so I grepped for every `getSessionStorage(` call across `app/` and the test files rather than trusting the type checker to catch a dropped `await` on something that still returns an object either way (a forgotten `await` here just gives you a `Promise` where an object was expected, which TypeScript will happily let you destructure into `undefined`s at runtime if the types are loose enough anywhere in the chain).
+
+## Testing a moving secret
+
+The tricky part of testing this is that "rotates every 12 hours" needs fake time, not a mocked function:
+
+```ts
+it("rotates the effective signing secret every 12 hours, invalidating old sessions", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+  const { getSession, commitSession } = await getSessionStorage(makeEnv());
+  const session = await getSession(null);
+  session.set("role", "admin");
+  const cookieHeader = await commitSession(session);
+
+  vi.setSystemTime(new Date("2026-01-01T11:00:00Z"));
+  const { getSession: getSessionLater } = await getSessionStorage(makeEnv());
+  expect((await getSessionLater(cookieHeader)).get("role")).toBe("admin");
+
+  vi.setSystemTime(new Date("2026-01-02T13:00:00Z"));
+  const { getSession: getSessionMuchLater } = await getSessionStorage(makeEnv());
+  expect((await getSessionMuchLater(cookieHeader)).get("role")).toBeUndefined();
+});
+```
+
+11 hours later, same bucket-pair window, cookie still valid. 37 hours later — more than two windows out — it isn't. That second assertion is really the whole point of today's change; the 7-day `Max-Age` version had no test that could even express it, because there was nothing server-side to assert against.
+
+Low-stakes app (it's just my own comment moderation panel), but the underlying mistake — treating a client-side cookie attribute as if it were a server-enforced timeout — is the same shape of bug that's worth catching before it's guarding something that matters.
