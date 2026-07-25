@@ -1,0 +1,93 @@
+---
+title: "Two Suspects Behind a Flaky iPhone/iPad E2E Run"
+date: "2026-07-23"
+description: "customer.spec.ts kept failing on iphone/ipad and not on Chromium/Firefox. Reproduced it locally with --repeat-each, found a real timeout problem, and left the WebKit-animation theory in as a second line of defense instead of betting the fix on it."
+tags: ["testing", "playwright", "webkit", "ci"]
+featured: false
+---
+
+`customer.spec.ts` had a pattern that's easy to misdiagnose: intermittent failures on the iphone/ipad projects, never on Chromium or Firefox. The obvious story is "WebKit is slow/weird," ship a WebKit-only workaround, move on. Reproducing it locally with `--repeat-each` at CI's worker count told a different, more boring story — and the WebKit theory didn't fully go away, it just got demoted to a second line of defense instead of the headline fix.
+
+## Reproducing it instead of guessing at it
+
+Ran the suite locally with `--repeat-each` and `--workers=3` to match CI's concurrency, instead of trying to reason about it from the CI logs alone. That surfaced `expect(...).toHaveURL(...)` timing out under load — not a WebKit rendering quirk, but the shared Postgres/MSSQL connection pools queueing once several workers hit them at once. The requests were succeeding, just not inside Playwright's default 5s expect timeout.
+
+That's the same contention already flagged in comments on the server side, in `app/lib/postgres.server.ts` and `app/lib/mssql.server.ts`:
+
+```ts
+// mssql.server.ts
+// Default pool max (10) queues requests under concurrent E2E load — a
+// single customer profile load alone fires 3 concurrent queries.
+pool: { max: 20 },
+```
+
+The pools were already sized up for this. The test timeouts just hadn't been widened to match.
+
+## Widening the timeouts, fleet-wide
+
+Fix in `playwright.config.ts` bumps `expect`, `actionTimeout`, and `navigationTimeout` past the defaults:
+
+```ts
+expect: {
+  timeout: 10_000,
+},
+
+use: {
+  baseURL: process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`,
+  trace: "on-first-retry",
+  actionTimeout: 15_000,
+  navigationTimeout: 15_000,
+  screenshot: "only-on-failure",
+  video: "retain-on-failure",
+},
+```
+
+Applied to every project, not just iphone/ipad. The failures only *showed up* on those two projects, but the root cause — several workers contending for the same DB pool — doesn't care which browser is asking. Any project can be one of the concurrent workers creating the load; scoping the fix to iphone/ipad would've just been fixing the symptom that happened to be visible first.
+
+## Not ruling out the second theory, just not betting on it alone
+
+The original WebKit-only read wasn't wrong, exactly — it's still a plausible contributor, just not the confirmed one. WebKit composites MUI's `Drawer`/`Accordion` transitions (`backdrop-filter: blur(...)` in particular) slower and less predictably than Chromium/Firefox, which is a real way to introduce animation-timing races into Playwright's actionability checks. Rather than drop that theory once the pool-timeout fix reproduced clean, added a shared fixture that disables it as a variable entirely:
+
+```ts
+// tests/e2e/fixtures.ts
+const DISABLE_ANIMATIONS_CSS = `
+  *, *::before, *::after {
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+`;
+
+const test = base.extend({
+  page: async ({ page }, use) => {
+    await page.addInitScript((css) => {
+      const style = document.createElement("style");
+      style.textContent = css;
+      // documentElement (<html>) always exists the moment the document
+      // object is created, unlike document.head, which may not be parsed
+      // yet this early — addInitScript runs before the page's own scripts,
+      // potentially before <head> exists.
+      document.documentElement.appendChild(style);
+    }, DISABLE_ANIMATIONS_CSS);
+    await use(page);
+  },
+});
+
+export { test, expect };
+```
+
+`addInitScript` runs before the page's own scripts, which is why the style gets appended to `documentElement` instead of `head` — `head` might not exist yet at that point, `html` always does.
+
+Every spec now imports `test`/`expect` from `./fixtures` instead of `@playwright/test` directly — not just `customer.spec.ts`, since the same Drawer/Accordion pattern is a latent risk anywhere else in the app that uses them:
+
+```ts
+// before
+import { test, expect, type Page } from "@playwright/test";
+
+// after
+import { test, expect } from "./fixtures";
+import type { Page } from "@playwright/test";
+```
+
+Two complementary fixes, not one fix and one abandoned theory: the timeout bump addresses the confirmed cause, the fixture insures against the one that's plausible but wasn't fully proven out. Cheaper to apply both fleet-wide than to spend more time trying to prove which one was *actually* responsible for any given historical failure.
