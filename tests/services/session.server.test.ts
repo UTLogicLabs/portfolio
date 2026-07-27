@@ -99,14 +99,16 @@ describe("session.server", () => {
 
   it("accepts a cookie signed by a peer instance that already advanced to the next bucket", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T11:59:59.900Z"));
+    // Instance A's clock is slightly ahead and has already rolled into the next bucket.
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.100Z"));
     const { getSession, commitSession } = await getSessionStorage(makeEnv());
     const session = await getSession(null);
     session.set("role", "admin");
     const cookieHeader = await commitSession(session);
 
-    vi.setSystemTime(new Date("2026-01-01T12:00:00.100Z"));
-    const { getSession: getSessionAfterRollover } = await getSessionStorage(makeEnv());
-    expect((await getSessionAfterRollover(cookieHeader)).get("role")).toBe("admin");
+    // Instance B is still slightly behind, computing the previous bucket as "current".
+    vi.setSystemTime(new Date("2026-01-01T11:59:59.900Z"));
+    const { getSession: getSessionOnPreviousBucket } = await getSessionStorage(makeEnv());
+    expect((await getSessionOnPreviousBucket(cookieHeader)).get("role")).toBe("admin");
   });
 });
