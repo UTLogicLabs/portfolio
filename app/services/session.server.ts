@@ -25,7 +25,9 @@ export async function getSessionStorage(env: CloudflareEnv) {
   const base = env.SESSION_SECRET;
   const currentBucket = Math.floor(Date.now() / ROTATION_WINDOW_MS);
   const secrets = base
-    ? await Promise.all([currentBucket, currentBucket - 1].map((b) => deriveSecret(base, b)))
+    ? await Promise.all(
+        [currentBucket, currentBucket - 1, currentBucket + 1].map((b) => deriveSecret(base, b)),
+      )
     : [""];
 
   return createCookieSessionStorage<SessionData>({
