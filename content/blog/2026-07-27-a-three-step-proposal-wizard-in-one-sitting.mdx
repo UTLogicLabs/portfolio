@@ -1,0 +1,157 @@
+---
+title: "A Three-Step Proposal Wizard in One Sitting"
+date: "2026-07-27"
+description: "Schema through UI in one day: proposal_line_item and a product catalog with cascading filters, then all three wizard routes, plus a live ReferenceError on two buttons that had never actually been wired up."
+tags: ["react-router", "typescript", "postgres", "mui", "sales-app"]
+featured: false
+---
+
+Eleven commits in `sales-app` today, all on `feature/phase2-proposal-wizard` — the whole path from a bare schema to a working three-step flow for attaching a covering to a window. Window Set → Select Windows → Select Covering, with a shared stepper and Postgres tables backing all of it, done in one sitting.
+
+## The schema first
+
+`proposal_window`/`proposal_line_item` plus a `product_material`/`product_option`/`product_lift_system` catalog with their cascading-filter lookup tables went in before any route existed. Production-parity tables, not stubs — the whole point was that the rest of the day's work could query real shapes instead of guessing at them.
+
+That schema landing also let me delete a crutch from a few days back. `getWindowIdsInProposals` had a temporary catch for `proposal_line_item` not existing yet in every environment:
+
+```ts
+// before
+export async function getWindowIdsInProposals(
+  windowIds: string[],
+): Promise<string[]> {
+  if (windowIds.length === 0) return [];
+  try {
+    const { rows } = await pgQuery<{ window_id: string }>(
+      `SELECT DISTINCT window_id::text AS window_id
+       FROM public.proposal_line_item
+       WHERE window_id = ANY($1)`,
+      [windowIds],
+    );
+    return rows.map((row) => row.window_id);
+  } catch (error) {
+    // TEMPORARY: public.proposal_line_item hasn't been migrated onto every
+    // environment yet. Until it has, treat "table missing" as "no windows
+    // are on a proposal" rather than 500ing the window set page. Remove
+    // this catch once the migration has landed everywhere.
+    if ((error as { code?: string }).code === "42P01") return [];
+    throw error;
+  }
+}
+```
+
+Once the table exists everywhere, that whole `try`/`catch` is dead weight — a `42P01` from here now means something's actually wrong, not "haven't migrated yet." Ripped it out along with the unit test that asserted the swallow-and-return-empty behavior. Small, but it's the kind of cleanup that's easy to forget once the workaround stops causing visible pain.
+
+## Step 1: restructuring `proposals/new.tsx`
+
+The old `proposals/new.tsx` did window-set-picking and window-selection in one screen. Step 1 of the wizard needed to be just the window set, with an optional `windowSetId` query param that skips straight to picking windows when you arrive from a window set's detail page (more on that below). The proposal name also stopped being a plain text field — it now renders as a clickable label, opening a rename drawer, matching the pattern `window-sets/new.tsx` already used. Default name is `Proposal N`, where `N` is one past `getProposalCountByWindowSetId` for that window set, not a hardcoded `Proposal 1`:
+
+```tsx
+it("defaults the name based on how many proposals already exist for this window set", () => {
+  renderRoute(phaseBLoaderData);
+
+  expect(
+    screen.getByRole("button", { name: "Proposal 3" }),
+  ).toBeInTheDocument();
+});
+```
+
+## Step 2: every window stays selectable
+
+Step 2 lists every window on the window set — not just the ones still missing a covering. Re-selecting a window that already has one re-opens step 3 in edit mode, since there's no reason to make re-editing a covering a different flow than picking one the first time. Multi-select carries a batch of windows into a single step-3 visit, so applying one covering to five windows at once is one trip through the wizard, not five. A "Remove windows" action drops not-yet-covered windows from the proposal outright — legacy had a `not_consider` status for this, but there's no equivalent against `proposal_line_item`, so removal here means actually removing the row.
+
+## Step 3: one covering, applied to a batch, priced per window
+
+This is the meatiest route. `product-catalog-lookup.tsx` is a resource route backing a cascading filter chain — category → brand → product → label → type → opacity → material → lift-system → direction — where each level is a server-driven query narrowed by whatever's already chosen above it. `CoveringFilterForm` renders all nine levels and disables anything below the first unmade selection.
+
+The interesting part is that one covering selection applies identically to every window in the batch (legacy's "batch-add"), but pricing still runs per window since size and quantity vary even when the SKU doesn't:
+
+```tsx
+const skus = liftSystemSku ? [materialSku, liftSystemSku] : [materialSku];
+const windows = await Promise.all(windowIds.map((id) => getWindowById(id)));
+
+for (const window of windows) {
+  if (!window) continue;
+  const pricing = await applyWindowPricing({
+    windowId: window.windowId,
+    sku: materialSku,
+    quantity: 1,
+    installBase: 0,
+    additionalBase: 0,
+    upcharge: 0,
+    discountRate: 0,
+    showDiscount: false,
+    installRequested: true,
+    priceBaseLevel: 0,
+  });
+  await applyCoveringToLineItem({
+    proposalId: params.proposalId,
+    windowId: window.windowId,
+    pricing,
+    skus,
+    coveringType: type,
+    coveringCategory: category,
+    userId: user.id,
+  });
+}
+
+const allCovered = await allProposalWindowsHaveCovering(params.proposalId);
+throw redirect(
+  allCovered
+    ? `/proposals/${params.proposalId}`
+    : `/proposals/${params.proposalId}/select-window`,
+);
+```
+
+That last part is the actual "wizard" behavior: apply, then check if every window on the proposal has a covering. If yes, land on the read-only proposal detail page. If not, throw the user back to step 2 to pick the next batch. No separate "finish" button — finishing is just what happens when there's nothing left to cover.
+
+Physical window-detail editing (reusing `WindowFieldsContent`) is explicitly out of scope for this pass. Windows render read-only in step 3, using the snapshot taken back in step 1. Worth calling out in the commit message so it doesn't get read as an oversight later.
+
+## The stepper is deliberately dumb
+
+`ProposalStepper` is a thin wrapper around MUI's `Stepper` — no state, no navigation logic, just labels and an `activeStep` prop:
+
+```tsx
+const STEPS = ["Window Set", "Select Windows", "Select Covering"] as const;
+
+function ProposalStepper({ activeStep }: ProposalStepperProps) {
+  return (
+    <Stepper activeStep={activeStep} sx={{ my: 2 }}>
+      {STEPS.map((label) => (
+        <Step key={label}>
+          <StepLabel>{label}</StepLabel>
+        </Step>
+      ))}
+    </Stepper>
+  );
+}
+```
+
+Each of the three routes decides what its own `activeStep` is and passes it in. Keeping it presentational-only meant it dropped straight into all three routes without any of them needing to agree on shared state — the URL is the state machine, the stepper just reflects it.
+
+## A live ReferenceError, hiding in plain sight
+
+Mid-afternoon, wiring the wizard's entry point into `window-sets/$windowSetId.tsx` turned up something that had nothing to do with the wizard: both "Add Window" and "Create Proposal" buttons on the window set detail page referenced `onClick` handlers that didn't exist. Not stubbed, not disabled-with-a-TODO — just `disabled` with no handler behind it, which meant the buttons had presumably never worked and nobody had filed it as a bug because they render as inert rather than throwing where anyone would notice.
+
+Fixed by wiring real navigation, scoped per-button loading state based on which destination is actually in flight:
+
+```tsx
+const addWindowPath = `/window-sets/${params.windowSetId}/windows/new`;
+const createProposalPath = "/proposals/new";
+const isAddingWindow = navigation.location?.pathname === addWindowPath;
+const isCreatingProposal =
+  navigation.location?.pathname === createProposalPath;
+
+const createProposal = () => {
+  if (!customerId || !addressId) {
+    navigate("/customers/search");
+    return;
+  }
+  navigate(
+    `${createProposalPath}?customerId=${customerId}&addressId=${addressId}`,
+  );
+};
+```
+
+`navigation.location` is only set while a client-side navigation is actually in flight, so comparing its pathname scopes each button's spinner to the one that was clicked — `Add Window` doesn't light up while `Create Proposal` is loading and vice versa. Proposals only ever attach to a customer's window set, so `createProposal` falls back to customer search when either id is missing, same as `/proposals/new`'s own loader would if it were reached without them.
+
+By the end of the day the whole loop closes: window set detail → create proposal → pick windows → pick a covering → back to detail, fully covered. Next up is probably the physical window-detail editing step 3 explicitly punted on, but that's tomorrow's problem.
