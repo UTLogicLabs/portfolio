@@ -1,0 +1,132 @@
+---
+title: "The Cancelled Sales Order That Kept Coming Back to Life"
+date: "2026-07-28"
+description: "A cancelled sales order that wouldn't stay cancelled, a customer's proposals that vanished behind an FK violation, and the window-set defaults toggle finally getting wired up end to end — all across heartbeat, server, and client in one day."
+tags: ["node", "postgres", "react", "state-machine", "bugfix"]
+featured: false
+---
+
+Three repos today — `heartbeat`, `server`, `client` — and most of it traced back to the same root cause: state that gets written by more than one place eventually gets written by the wrong one.
+
+## A cancelled order that wouldn't stay cancelled
+
+`heartbeat` polls Adobe Sign every 30 seconds and writes whatever status comes back straight onto `new_sales_order`. That's fine until someone cancels an order by hand while a cycle is mid-flight, or a retry is still queued up from before the cancellation. The update queries had no idea a cancellation had happened — they just overwrote `adobe_sign_status` unconditionally:
+
+```js
+// before
+const query =
+  'UPDATE new_sales_order SET adobe_sign_status = $1 WHERE id = $2 AND adobe_sign_id = $3'
+```
+
+So a manually cancelled order could get clobbered back to `ERROR` by a stale heartbeat cycle, which re-enters the error retry loop (the same daily retry job from a few weeks back), which polls Adobe Sign again, which can flip it back to `ERROR` again — cancelled orders stuck cycling indefinitely instead of staying cancelled. Fix is a status guard on both the plain status update and the one that also writes `work_order`:
+
+```js
+// after
+const query =
+  "UPDATE new_sales_order SET adobe_sign_status = $1 WHERE id = $2 AND adobe_sign_id = $3 AND adobe_sign_status != 'CANCELLED'"
+```
+
+That closes the write side, but `server` had the same hole from a different angle: `convertToWorkOrder` had no status check at all, so hitting the endpoint directly — bypassing heartbeat's own polling filter entirely — could still convert a cancelled order into a work order:
+
+```js
+// dc25b2a
+if (salesOrderDetails.adobe_sign_status === 'CANCELLED') {
+  throw new Error(
+    `Sales order ${sales_order_id} is cancelled and cannot be converted`,
+  );
+}
+```
+
+Two services, two different ways to write to the same row, one bug: `CANCELLED` was treated as a display value everywhere except the one place — the actual write query — where it needed to be an invariant.
+
+## Proposals that vanished for no reason
+
+This one's from the standing issues list — "Created proposals are disappearing (Sean & Sara & Danny)" — and today's commit is why. `GET /cm/customer/proposals` was throwing before the list query even ran, so it looked like every proposal for that customer had vanished when really the whole endpoint was 500ing.
+
+The cause: `deleteDraftProposalsByCustomer` and `deleteEmptyProposalsByCustomer` clean up empty/draft proposals on customer load, but neither one checked whether a proposal had already been converted to a sales order. Deleting a proposal that a `new_sales_order` row still points to hits `new_sales_order_proposal_id_fkey` and aborts the whole request:
+
+```sql
+-- deleteEmptyProposalsByCustomer, after
+AND NOT EXISTS (
+  SELECT 1
+  FROM proposal_additional_charge pac
+  WHERE pac.proposal_id = p.id
+)
+AND NOT EXISTS (
+  SELECT 1
+  FROM new_sales_order nso
+  WHERE nso.proposal_id = p.id
+)
+AND p.customer_id = $1
+```
+
+A proposal that's been converted to a sales order and has no remaining line items or charges looks exactly like an abandoned draft to that cleanup query — it just also happens to have something else referencing it. Excluding anything with a `new_sales_order` row fixes the FK violation and, more importantly, stops the cleanup job from trying to delete proposals that are very much still in use.
+
+## The window-set defaults toggle, actually wired up
+
+`WindowForm.jsx` has had a "Set as Window Set Defaults" switch for a while, rendering as `<Switch />` with no `checked` and no `onChange` — visually present, functionally inert. Today it got wired into an actual `ApplyDefault` flag that flows from the toggle down through both the create and update window endpoints:
+
+```jsx
+const [applyDefaults, setApplyDefaults] = useState(false);
+const saveDefaults = ({ target }) => setApplyDefaults(target.checked);
+```
+
+```jsx
+control={<Switch checked={applyDefaults} onChange={saveDefaults} />}
+label={
+  <Typography>
+    {hasWindowSetDefaults || window?.hasDefaults ? 'Update' : 'Set as'}{' '}
+    Window Set Defaults
+  </Typography>
+}
+```
+
+On the server side, `createWindowSetWithWindow` and `updateWindowDetailed` both reuse the existing `set_default_values`/`update_window_sets` procedures rather than adding new ones — the pattern is "if `ApplyDefault` and the window set doesn't already have defaults, flip `has_default_values` on, then write the payload":
+
+```js
+} else if (ApplyDefault && !existingWindowSet.has_default_values) {
+  await windowSets.update_window_sets({
+    window_set_id,
+    address_id: existingWindowSet.address_id,
+    sales_person_id: existingWindowSet.sales_person_id,
+    window_set_id_seq: existingWindowSet.window_set_id_seq,
+    set_default_value: true,
+  });
+}
+
+if (ApplyDefault) {
+  await windowSets.set_default_values(buildDefaultValuesPayload(window_set_id, actorId, window));
+}
+```
+
+On the read side, new windows in a set with defaults now pre-fill from them via a `SET_DEFAULTS` reducer action, populated once both `defaultOptions` and the options lookups have loaded:
+
+```jsx
+useEffect(() => {
+  if (isEditMode || !defaultOptions || !Object.keys(options).length) {
+    return;
+  }
+  dispatchWindowDetails({
+    action: 'SET_DEFAULTS',
+    payload: {
+      measurement_type: defaultOptions.measurement_type,
+      window_depth: (options.window_depth || []).find(
+        (o) => o.sku_name === defaultOptions.window_depth,
+      ),
+      // ...same lookup pattern for existing_covering, build_type, mount_surface, obstructions, ladder
+    },
+  });
+}, [isEditMode, defaultOptions, options]);
+```
+
+While in there, `get_window_options` also got a new sibling, `get_merged_window_options`, because some windows have option data in the legacy `window_additional_charge`/`master_sku_list` tables instead of the newer `window_option` table. The edit form was rendering blank Obstruction Details for anything that predates the migration — the merged query does a `DISTINCT ON (type)` between both sources, preferring `window_option` when it exists and falling back to the legacy tables when it doesn't, so old windows stop looking like their data got lost.
+
+## Smaller stuff from the same day
+
+A guard in `windows_data.js`: the client no longer sends `windowConfiguration` for `/wm/window` saves now that Window/Vertical Configuration was removed from the UI, so every direct property access on it (`.service_name`, `.sku`) needed optional chaining to stop throwing on the now-absent field.
+
+A `Subtotal` line landed in the shared `Charges` component — product, installation, services, accessories, and additional charges summed into one line before discount and tax, using the same `sum()` helper the rest of the component already leans on.
+
+And a Year-To-Date Sales card got added next to Year-Over-Year in Sales Reporting — currently rendering off the same `metrics[0]` placeholder as its neighbor while the real YTD query gets wired up, so the layout's in place before the data is.
+
+Nothing here needed a redesign, but the theme repeats across all three fixes: `CANCELLED`, `has_default_values`, and "does another table point at this row" are all pieces of state that more than one code path can write, and the bug each time was one of those paths not checking before it wrote.
