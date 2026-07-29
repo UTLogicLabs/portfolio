@@ -49,14 +49,15 @@ The cause: `deleteDraftProposalsByCustomer` and `deleteEmptyProposalsByCustomer`
 -- deleteEmptyProposalsByCustomer, after
 AND NOT EXISTS (
   SELECT 1
-        FROM proposal_additional_charge pac
-        WHERE pac.proposal_id = p.id
+  FROM proposal_additional_charge pac
+  WHERE pac.proposal_id = p.id
 )
-      AND NOT EXISTS (
+AND NOT EXISTS (
   SELECT 1
-        FROM new_sales_order nso
-        WHERE nso.proposal_id = p.id
-) and p.customer_id = $1
+  FROM new_sales_order nso
+  WHERE nso.proposal_id = p.id
+)
+AND p.customer_id = $1
 ```
 
 A proposal that's been converted to a sales order and has no remaining line items or charges looks exactly like an abandoned draft to that cleanup query — it just also happens to have something else referencing it. Excluding anything with a `new_sales_order` row fixes the FK violation and, more importantly, stops the cleanup job from trying to delete proposals that are very much still in use.
