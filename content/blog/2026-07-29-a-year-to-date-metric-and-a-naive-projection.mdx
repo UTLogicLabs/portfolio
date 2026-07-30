@@ -1,0 +1,140 @@
+---
+title: "A Year-To-Date Metric and a Naive Projection"
+date: "2026-07-29"
+description: "Wiring yesterday's placeholder YTD card up to a real SQL Server query, then bolting on a full-year projection off of it — plus the accordion and subtotal polish that came along for the ride."
+tags: ["node", "sql-server", "react", "mui", "sales-app"]
+featured: false
+---
+
+Yesterday's post ended with the Year-To-Date card in `SalesReporting` rendering off the same `metrics[0]` placeholder as its Year-Over-Year neighbor, "while the real YTD query gets wired up." Today's the day it got wired up — plus a third card riding along that nobody asked for yet: a naive full-year projection.
+
+## The query: two years, one CASE statement
+
+`server` already had `getMonthlySales` and `getYearlySales` for the sales metrics endpoint. `getYearToDateSales` is the same shape but narrower — instead of pulling every month, it pulls exactly two windows: January 1st through today for the current year, and the same span a year back, then labels each row so a single `SELECT` can diff them:
+
+```sql
+WITH YTDSales AS (
+    SELECT
+        CASE
+            WHEN [DateSold] >= DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
+                THEN 'current_year'
+            ELSE 'previous_year'
+        END AS YearGroup,
+        SUM([TotalInvoice]) AS Sales
+    FROM [blindman].[dbo].[Invoice]
+    WHERE [State] != 'Canceled'
+      AND [SalesPersonID] = @userId
+      AND (
+        ([DateSold] >= DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
+            AND [DateSold] < DATEADD(DAY, 1, GETDATE()))
+        OR
+        ([DateSold] >= DATEFROMPARTS(YEAR(GETDATE()) - 1, 1, 1)
+            AND [DateSold] < DATEADD(DAY, 1, DATEADD(YEAR, -1, GETDATE())))
+      )
+    GROUP BY
+        CASE
+            WHEN [DateSold] >= DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
+                THEN 'current_year'
+            ELSE 'previous_year'
+        END
+)
+SELECT
+    MAX(CASE WHEN YearGroup = 'current_year' THEN Sales ELSE 0 END) AS Sales,
+    MAX(CASE WHEN YearGroup = 'previous_year' THEN Sales ELSE 0 END) AS PreviousYearSales,
+    CAST(
+        (MAX(CASE WHEN YearGroup = 'current_year' THEN Sales ELSE 0 END)
+            - MAX(CASE WHEN YearGroup = 'previous_year' THEN Sales ELSE 0 END)) * 100.0
+        / NULLIF(MAX(CASE WHEN YearGroup = 'previous_year' THEN Sales ELSE 0 END), 0)
+        AS DECIMAL(10,2)
+    ) AS PercentChange
+FROM YTDSales;
+```
+
+The `NULLIF` on the denominator is the only defensive bit worth calling out — a sales person with zero sales this time last year would otherwise divide by zero and blow up the whole metrics endpoint instead of just returning a null `PercentChange`. Everything else is the same pattern `getYearlySales` already established: one CTE to bucket by year, one final `SELECT` to pivot the buckets into columns.
+
+`getMetrics` in the controller just adds the new call alongside the two that were already there:
+
+```js
+const monthlySales = await userQueries.getMonthlySales(actorId);
+const yearlySales = await userQueries.getYearlySales(actorId);
+const yearToDateSales = await userQueries.getYearToDateSales(actorId);
+```
+
+## The projection: dayOfYear math, not a forecasting model
+
+With real YTD data flowing, the obvious next question is "on pace for what by December?" — so a `Projected` card went in next to it. The math is about as naive as projections get: take today's YTD total, divide by how far through the year we are, multiply back up to 365:
+
+```js
+const projectedValue =
+  yearToDateSales?.Sales ?
+    (yearToDateSales.Sales / moment().dayOfYear()) * 365
+  : 0
+const projectedChange =
+  lastYearTotal ?
+    ((projectedValue - lastYearTotal) * 100) / lastYearTotal
+  : 0
+```
+
+`lastYearTotal` isn't from the YTD query at all — it's summed from `yearlySales.previous_year`, which was already sitting there from the existing Year-Over-Year chart:
+
+```js
+const lastYearTotal = (yearlySales?.previous_year ?? []).reduce(
+  (sum, month) => sum + Number(month.sales || 0),
+  0,
+)
+```
+
+No seasonality, no weighting toward Q4 (this is a window-covering business — December is not evenly distributed), just linear extrapolation off whatever fraction of the year has elapsed. It'll be noisy through January and settle down by summer, which is a fine tradeoff for a first pass — a real seasonal model is a separate project, not something to sneak into a card layout commit.
+
+## Fixing the metrics array off-by-one that was already there
+
+Wiring in a third card surfaced something that had nothing to do with today's work: the existing three metric slots in the JSX were all pointing at `metrics[0]`:
+
+```jsx
+// before
+<MetricsCard metric={metrics[0]} />
+...
+<MetricsCard metric={metrics[0]} />
+...
+<MetricsCard metric={metrics[0]} />
+```
+
+Every card was rendering the same "Current Month Sales" data — the Year-To-Date and Trending slots had just never been pointed at their own index, presumably from when the array only had one entry to begin with and the JSX got copy-pasted for the other two slots without the index changing. Now that there are three real entries in `metrics`, each `<Grid>` slot points at its own:
+
+```jsx
+<MetricsCard metric={metrics[0]} />
+...
+<MetricsCard metric={metrics[1]} />
+...
+<MetricsCard metric={metrics[2]} />
+```
+
+Also added a `changeLabel` field to the metric objects so each card can say what it's actually comparing against — "from last year" for YTD, "projected vs. last year" for the projection — instead of every `MetricsCard` hardcoding "from last month":
+
+```jsx
+<Typography variant='caption' color='text.secondary' sx={{ ml: 0.5 }}>
+  {metric?.changeLabel ?? 'from last month'}
+</Typography>
+```
+
+## Everything else: an afternoon of layout polish
+
+The rest of the commit is smaller stuff that had been nagging:
+
+`AccordionActions` switched from a horizontal row to a column stack (`flexDirection: 'column'`, `alignItems: 'flex-start'`) across `ProposalsSection` and `WindowSetsSection`, since the actions in there were starting to wrap awkwardly at narrower widths.
+
+The `Charges` subtotal line dropped the parenthetical — `Subtotal (Product & Install) :` became `Product & Install :` — and a real `Subtotal :` row was added to the PDF version, summed via the same `sum()` helper the rest of the component uses:
+
+```jsx
+const subtotal = sum(
+  safeCharges.retailPrice,
+  safeCharges.installation,
+  ...accessoriesCharge.map(({ charge }) => charge),
+  ...servicesCharge.map(({ charge }) => charge),
+  ...addtionalCharge.map(({ charge }) => charge),
+)
+```
+
+And `WindowSummaryField` in `WindowForm.jsx` got simplified — dropped the unused `required` asterisk prop and the `Box` wrapper it didn't need, in favor of a single `Typography` with the value inlined as a `component='span'`. Small cleanup, but one less prop to thread through every call site.
+
+Nothing here was a bug hunt — just a placeholder from yesterday turning into a real number, one bad copy-paste getting caught in the process, and the usual pass of layout polish that comes with actually looking at a screen for a few hours.
