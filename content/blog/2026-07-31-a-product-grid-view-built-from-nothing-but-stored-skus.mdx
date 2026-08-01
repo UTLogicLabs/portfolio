@@ -1,0 +1,206 @@
+---
+title: "A Product Grid View Built From Nothing But Stored SKUs"
+date: "2026-07-31"
+description: "sales-app's proposal wizard needed a Product Grid View like legacy's, but proposal_line_item never stored brand, product, material, lift, or which options got picked — just the skus. Getting the grid to render meant reverse-looking-up all of that from three catalog tables, batched once per proposal instead of once per window."
+tags: ["typescript", "postgres", "react-router", "sales-app"]
+featured: false
+---
+
+Kept building on the proposal wizard in `sales-app` today, this time on the read-only side: the Product Grid View that legacy's proposal detail page shows underneath the windows table. The wizard has been writing `proposal_line_item` rows with pricing and a `sku[]` since step 3 landed, but nothing renders back what covering actually got picked — no brand, no product, no material, no options. Turns out none of that lives on `proposal_line_item` at all.
+
+## The schema doesn't store what the grid needs to show
+
+`proposal_line_item` has a `sku` column and that's it as far as covering identity goes. Brand, product, label, type, material, opacity, lift, and direction all live on separate catalog tables (`product_material`, `product_lift_system`), keyed by `sku`, not by line item. Same story for options — `product_option` has its own `sku` and a `pricing_status` flag for paid vs. complimentary, grouped by an `option_type_code` that joins out to `product_option_type` for the display label. None of it is denormalized onto the line item, because the wizard never needed to read any of it back until today — step 3 only ever needed to write.
+
+So "what covering did window 4 get" is really "look up which catalog rows exist for the skus window 4's line item happens to be holding onto."
+
+## Batched reverse lookups, not one query per window
+
+`product-catalog.server.ts` got three new lookup functions, all shaped the same way — take an array of skus, return whatever rows in that catalog table match:
+
+```ts
+export async function getMaterialDetailsBySkus(
+  skus: string[],
+): Promise<MaterialDetails[]> {
+  if (skus.length === 0) return [];
+  const { rows } = await pgQuery<MaterialDetails>(
+    `SELECT sku, covering_category AS category, brand, product, label, type, material, opacity
+     FROM public.product_material
+     WHERE sku = ANY($1)`,
+    [skus],
+  );
+  return rows;
+}
+
+export async function getLiftSystemDetailsBySkus(
+  skus: string[],
+): Promise<LiftSystemDetails[]> {
+  if (skus.length === 0) return [];
+  const { rows } = await pgQuery<LiftSystemDetails>(
+    `SELECT ls.sku, ls.lift_systen_name AS lift, dt.direction_type_name AS direction
+     FROM public.product_lift_system ls
+     LEFT JOIN public.product_direction_type dt ON dt.direction_code = ls.direction_code
+     WHERE ls.sku = ANY($1)`,
+    [skus],
+  );
+  return rows;
+}
+```
+
+(`lift_systen_name` is really spelled that way in the column — not touching it today, just aliasing around it.)
+
+`getProposalLineItemsWithCoveringDetails` in `proposal-line-item.server.ts` is what actually calls these, and it collects every sku across every line item on the proposal first, so the three catalog lookups run once total instead of once per line item:
+
+```ts
+export async function getProposalLineItemsWithCoveringDetails(
+  proposalId: string,
+): Promise<ProposalLineItemWithCoveringDetails[]> {
+  const lineItems = await getProposalLineItems(proposalId);
+  const allSkus = Array.from(
+    new Set(lineItems.flatMap((li) => li.sku ?? [])),
+  );
+
+  const [materials, liftSystems, options] = await Promise.all([
+    getMaterialDetailsBySkus(allSkus),
+    getLiftSystemDetailsBySkus(allSkus),
+    getOptionDetailsBySkus(allSkus),
+  ]);
+
+  const materialBySku = new Map(materials.map((m) => [m.sku, m]));
+  const liftSystemBySku = new Map(liftSystems.map((l) => [l.sku, l]));
+  const optionBySku = new Map(options.map((o) => [o.sku, o]));
+
+  return lineItems.map((lineItem) => {
+    const skus = lineItem.sku ?? [];
+    const material = skus.map((sku) => materialBySku.get(sku)).find(Boolean);
+    const liftSystem = skus
+      .map((sku) => liftSystemBySku.get(sku))
+      .find(Boolean);
+    const lineItemOptions = skus
+      .map((sku) => optionBySku.get(sku))
+      .filter((option): option is OptionDetails => option !== undefined);
+
+    return {
+      ...lineItem,
+      brand: material?.brand ?? null,
+      product: material?.product ?? null,
+      lift: liftSystem?.lift ?? null,
+      direction: liftSystem?.direction ?? null,
+      paidOptions: lineItemOptions.filter((option) => option.paid),
+      complimentaryOptions: lineItemOptions.filter((option) => !option.paid),
+    };
+  });
+}
+```
+
+A line item's `sku[]` can hold skus from more than one catalog table at once — the material sku and, if it applies, a lift-system sku — so each field just takes the first sku in the array that has a match in that particular `Map`. Three `Promise.all`'d queries per proposal, not per window, regardless of how many windows are on it.
+
+## Options needed to come back grouped, not flat
+
+`getPaidOptions`/`getComplimentaryOptions` used to return a flat `SkuOption[]`. Legacy's `ProductOptions.jsx` keys its options by group name (`"Valance"`, `"Chain Type"`, etc.) instead of rendering one flat list, so `getOptions` picked up a join to `product_option_type` and now buckets by that group's label:
+
+```ts
+async function getOptions(
+  category: string,
+  brand: string,
+  product: string,
+  label: string,
+  pricingStatus: boolean,
+): Promise<Record<string, SkuOption[]>> {
+  const { rows } = await pgQuery<{
+    sku: string;
+    skuName: string;
+    groupName: string;
+  }>(
+    `SELECT po.sku, po.option_name AS "skuName", pot.option_name AS "groupName"
+     FROM public.product_option po
+     JOIN public.product_option_type pot ON pot.option_type_code = po.option_type_code
+     WHERE po.active = true AND po.pricing_status = $5
+       AND po.covering_category = $1 AND po.brand = $2 AND po.product = $3 AND po.label = $4
+     ORDER BY po.display_sort_order ASC`,
+    [category, brand, product, label, pricingStatus],
+  );
+
+  const grouped: Record<string, SkuOption[]> = {};
+  for (const { sku, skuName, groupName } of rows) {
+    (grouped[groupName] ??= []).push({ sku, skuName });
+  }
+  return grouped;
+}
+```
+
+Everything downstream of `getOptions` (the cascading filter form's option step) just started getting a `Record<string, SkuOption[]>` instead of a flat array, no callers needed to change — they were already rendering a single flat list, and now render a `Record` with one key.
+
+## The grid itself: one table per covering category, columns inferred
+
+`ProductGridView` is a straight port of legacy's `ProductGridView.jsx` + `ProductTables.jsx`, grouping the same windows the windows table shows by `coveringCategory` and rendering one `Table` per category:
+
+```tsx
+function ProductGridView({ windows, lineItems }: ProductGridViewProps) {
+  const windowsById = new Map(windows.map((window) => [window.windowId, window]));
+
+  const rowsByCategory = new Map<string, ProductGridRow[]>();
+  for (const lineItem of lineItems) {
+    if (!lineItem.coveringSelected || !lineItem.coveringCategory) continue;
+    const window = windowsById.get(lineItem.windowId);
+    if (!window) continue;
+
+    const row = omitNullish({
+      id: window.windowId,
+      index: lineItem.sequence,
+      name: window.windowName,
+      brand: lineItem.brand,
+      product: lineItem.product,
+      lift: lineItem.lift,
+      direction: lineItem.direction,
+      paidOptions: lineItem.paidOptions.map((option) => option.name).join(", "),
+      complimentaryOptions: lineItem.complimentaryOptions
+        .map((option) => option.name)
+        .join(", "),
+    });
+
+    const category = lineItem.coveringCategory;
+    const rows = rowsByCategory.get(category) ?? [];
+    rows.push(row);
+    rowsByCategory.set(category, rows);
+  }
+
+  if (rowsByCategory.size === 0) {
+    return <Typography>No coverings applied yet.</Typography>;
+  }
+
+  return (
+    <Stack spacing={2}>
+      {Array.from(rowsByCategory.entries()).map(([category, rows]) => (
+        <Stack key={category} spacing={1}>
+          <Typography variant="h6" sx={{ px: 2 }}>
+            {category}
+          </Typography>
+          <Table rows={rows} columns={defineColumns(rows)} pagination={false} />
+        </Stack>
+      ))}
+    </Stack>
+  );
+}
+```
+
+`omitNullish` strips any key that's `null` or empty before the row goes in, and `defineColumns` — an existing helper, matching legacy's own use of it — infers each `Table`'s columns from whatever keys actually survive that filter. A shutter's row and a shade's row don't have the same shape (no `lift`/`direction` on a shutter, no `paidOptions` group on some shades), so the columns differ per category without either row shape needing a schema of its own.
+
+It's wired into `$proposalId.tsx` as a collapsed `Accordion` under the windows table:
+
+```tsx
+<Accordion>
+  <AccordionSummary startIcon={<Icon name="secondary-grid-view" />}>
+    Product Grid View
+  </AccordionSummary>
+  <AccordionDetails>
+    <ProductGridView windows={windows} lineItems={lineItems} />
+  </AccordionDetails>
+</Accordion>
+```
+
+Closed by default — it's a secondary view of the same windows the primary table already shows, not something that needs to compete for attention on page load.
+
+## The takeaway
+
+Nothing about today's work involved a schema change. The whole feature is a read path over data that was already being written correctly — proposal_line_item's `sku[]` was always enough to reconstruct brand, product, material, lift, direction, and every option, it just needed three batched lookups and a grouping step to turn back into something a person can read. Doing those lookups once per proposal instead of once per window was the only part that needed real care; everything past that was mechanical porting of legacy's grouping logic into the new component shape.
