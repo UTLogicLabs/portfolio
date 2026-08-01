@@ -1,7 +1,7 @@
 ---
 title: "A Product Grid View Built From Nothing But Stored SKUs"
 date: "2026-07-31"
-description: "sales-app's proposal wizard needed a Product Grid View like legacy's, but proposal_line_item never stored brand, product, material, lift, or which options got picked — just the skus. Getting the grid to render meant reverse-looking-up all of that from three catalog tables, batched once per proposal instead of once per window."
+description: "sales-app's proposal wizard needed a Product Grid View like legacy's, but proposal_line_item never stored brand, product, material, lift, or which options got picked — just the SKUs. Getting the grid to render meant a reverse lookup against three catalog tables, batched once per proposal instead of once per window."
 tags: ["typescript", "postgres", "react-router", "sales-app"]
 featured: false
 ---
@@ -129,7 +129,7 @@ async function getOptions(
 }
 ```
 
-Everything downstream of `getOptions` (the cascading filter form's option step) just started getting a `Record<string, SkuOption[]>` instead of a flat array, no callers needed to change — they were already rendering a single flat list, and now render a `Record` with one key.
+Everything downstream of `getOptions` (the cascading filter form's option step) now gets a `Record<string, SkuOption[]>` instead of a flat array. The one caller that mattered, the option step's renderer, switched from mapping over a flat list to mapping over the record's entries — one `<fieldset>` per group name, matching how `ProductOptions.jsx` already grouped things on the legacy side.
 
 ## The grid itself: one table per covering category, columns inferred
 
