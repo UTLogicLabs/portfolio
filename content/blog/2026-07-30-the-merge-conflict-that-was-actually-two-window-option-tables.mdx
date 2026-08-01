@@ -1,0 +1,155 @@
+---
+title: "The Merge Conflict That Was Actually Two Window-Option Tables"
+date: "2026-07-30"
+description: "Merging release/v3.1.0 into feature/shutter-input in server surfaced a real problem hiding behind the conflict markers: two tables both claiming to store the same window options, and no clean way to read from both at once. Plus a round of Copilot PR review fixes on client that turned up an actual layout bug."
+tags: ["postgres", "node", "react", "backend", "migration"]
+featured: false
+---
+
+Merged `release/v3.1.0` into `feature/shutter-input` on `server` today, and the conflicts weren't the usual "two people touched the same line" kind — `window_set_detailed_data.js` and `window_option_queries.js` conflicted because the release branch and the shutter-input branch had each grown their own opinion about where window options live. Sorting that out turned into the actual work. Also spent part of the day clearing Copilot's review comments on `client`'s PR #27, which caught a real spacing bug along the way.
+
+## Two tables, same job
+
+`window_additional_charge` is the old home for options like window depth, existing covering, build type, mount surface, obstructions, and ladder — each row a SKU-priced add-on joined against `master_sku_list`. Shutter-input needed a more generic `window_option` table (`option_type` + `numeric_value`, no SKU required) for the newer measurement fields it's adding. Both tables can now hold data for the same six option types, depending on which code path wrote the window.
+
+`get_window_options` only ever knew about the legacy table, so `getWindowDetailed` would silently drop shutter-input options for any window that had them. Rather than migrate every existing row (didn't want release/v3.1.0 blocked on a backfill), added a second query that merges both sources and prefers whichever one actually has data:
+
+```js
+const LEGACY_OPTION_TYPE_LABELS = {
+  window_depth: 'Window Depth',
+  existing_covering: 'Existing Covering',
+  build_type: 'Build Type',
+  mount_surface: 'Mount Surface',
+  obstructions: 'Obstructions',
+  ladder: 'Ladder',
+}
+
+async function get_merged_window_options({ window_id }) {
+  const query = `
+  SELECT
+    CASE type
+      WHEN 'Window Depth' THEN 'window_depth'
+      WHEN 'Existing Covering' THEN 'existing_covering'
+      WHEN 'Build Type' THEN 'build_type'
+      WHEN 'Mount Surface' THEN 'mount_surface'
+      WHEN 'Obstructions' THEN 'obstructions'
+      WHEN 'Ladder' THEN 'ladder'
+    END AS option_type,
+    additional_charge_sku AS sku,
+    sku_name,
+    additional_detail AS detail_text,
+    numeric_value
+  FROM (
+    SELECT DISTINCT ON (type)
+      additional_charge_sku, additional_detail, sku_name, label, type, numeric_value
+    FROM (
+      SELECT additional_charge_sku, additional_details AS additional_detail,
+             sku_name, label, type, NULL::numeric AS numeric_value, 0 AS priority
+      FROM public.window_additional_charge
+      LEFT JOIN public.master_sku_list
+        ON window_additional_charge.additional_charge_sku = master_sku_list.sku
+      WHERE window_id = $1
+
+      UNION ALL
+
+      SELECT sku AS additional_charge_sku, detail_text AS additional_detail,
+             sku_name, NULL AS label,
+             CASE option_type
+               WHEN 'window_depth' THEN 'Window Depth'
+               WHEN 'existing_covering' THEN 'Existing Covering'
+               WHEN 'build_type' THEN 'Build Type'
+               WHEN 'mount_surface' THEN 'Mount Surface'
+               WHEN 'obstructions' THEN 'Obstructions'
+               WHEN 'ladder' THEN 'Ladder'
+               ELSE option_type
+             END AS type,
+             numeric_value, 1 AS priority
+      FROM public.window_option
+      WHERE window_id = $1
+        AND option_type IN (
+          'window_depth', 'existing_covering', 'build_type',
+          'mount_surface', 'obstructions', 'ladder'
+        )
+    ) all_sources
+    ORDER BY type, priority DESC
+  ) merged
+  WHERE type IN (
+    'Window Depth', 'Existing Covering', 'Build Type',
+    'Mount Surface', 'Obstructions', 'Ladder'
+  )`
+
+  const { rows } = await postgres.query(query, [window_id])
+  const otherOptions = await get_window_options({ window_id })
+  const mergedOptionTypes = new Set(Object.values(LEGACY_OPTION_TYPE_LABELS))
+  return [
+    ...rows,
+    ...otherOptions.filter(
+      (option) => !mergedOptionTypes.has(LEGACY_OPTION_TYPE_LABELS[option.option_type]),
+    ),
+  ]
+}
+```
+
+The `DISTINCT ON (type)` with a `priority` column is doing the real work — union both sources, sort each option type by priority descending, and keep only the first row per type. `window_option` rows win (`priority: 1`) when they exist, `window_additional_charge` rows fall back (`priority: 0`) when they don't. Everything that isn't one of the six overlapping types comes from `get_window_options` unchanged, appended after filtering out anything the merged query already covered. `getWindowDetailed` now calls `get_merged_window_options` instead of `get_window_options` directly — one call site, no changes needed downstream since the shape coming back is the same.
+
+## Apply-defaults needed the same window-set lookup twice
+
+Shutter-input also shipped an `ApplyDefault` flag on both window creation and update. When set, it should copy the current window's option values onto the window set as defaults for future windows — but only flip `has_default_values` on if it isn't already set, and only on the set, not on every request:
+
+```js
+} else if (ApplyDefault && !existingWindowSet.has_default_values) {
+  await windowSets.update_window_sets({
+    window_set_id,
+    address_id: existingWindowSet.address_id,
+    sales_person_id: existingWindowSet.sales_person_id,
+    window_set_id_seq: existingWindowSet.window_set_id_seq,
+    set_default_value: true,
+  })
+}
+
+if (ApplyDefault) {
+  await windowSets.set_default_values(buildDefaultValuesPayload(window_set_id, actorId, window))
+}
+```
+
+`buildDefaultValuesPayload` is a plain mapper from the window's option objects down to the flat shape `set_default_values` (a Postgres stored procedure, `CALL public.set_default_values($1..$13)`) expects — mostly `sku_name` off each option, with a couple of legacy field names (`Othermeasurement`, `Windowsill`) kept as-is since the procedure signature already uses them and there's no reason to rename a stored proc argument today. `updateWindowDetailed` needed the identical `has_default_values` check, just re-fetching the window set since `req.body` doesn't carry it on an update — small duplication, left alone rather than extracting a helper for two call sites that might diverge once shutter-input settles.
+
+## Elsewhere: Copilot's review comments on client caught a real bug
+
+Cleared four review comments Copilot left on PR #27. Three were straightforward — renamed a `SalesReporting` metric from "Projected" to "Trending" since that's what the number actually represents, dropped `required: true` off most of `WindowSummary`'s field list since none of those fields are actually required by the schema, and made `WindowSummaryGrid`'s column/row template respond to breakpoints instead of hardcoding the `xs` value:
+
+```jsx
+// before
+gridTemplateColumns: `repeat(${WINDOW_SUMMARY_COLUMNS.xs}, 1fr)`,
+gridTemplateRows: `repeat(${rows.xs}, auto)`,
+
+// after
+gridTemplateColumns: Object.fromEntries(
+  Object.entries(WINDOW_SUMMARY_COLUMNS).map(([breakpoint, columns]) => [
+    breakpoint,
+    `repeat(${columns}, 1fr)`,
+  ]),
+),
+gridTemplateRows: Object.fromEntries(
+  Object.entries(rows).map(([breakpoint, count]) => [
+    breakpoint,
+    `repeat(${count}, auto)`,
+  ]),
+),
+```
+
+MUI's `sx` prop already accepts an object keyed by breakpoint (`{ xs: '...', sm: '...' }`) in place of a single value — `Object.fromEntries` over `Object.entries(WINDOW_SUMMARY_COLUMNS)` turns the existing breakpoint map into that shape for free, so the grid actually reflows instead of staying stuck at the `xs` column count on every screen size.
+
+The fourth comment was about accordion spacing, and turned out to be an actual layout bug, not style nitpicking: `Accordion.jsx`'s sibling-selector rule used `marginLeft` to space stacked children —
+
+```jsx
+'>:not(style)~:not(style)': {
+  marginLeft: '2.1rem',
+},
+```
+
+— which pushes later siblings to the right instead of down. Every consumer of that accordion (`ProposalDetails`, `WindowSet`) had been copying the same `marginLeft: '2.1rem'` onto individual buttons to compensate, which happened to look fine when there were exactly two stacked buttons but fell apart as soon as a third got added. Changed the base rule to `marginTop` and stripped the compensating `marginLeft` off every button that had it — four files, one real fix.
+
+## The takeaway
+
+The merge conflict forced the question that would've eventually needed answering anyway: what happens to a window's options once two tables both think they own the answer. `DISTINCT ON` plus a priority column was enough to avoid a hard migration, but it's a stopgap — worth revisiting once nothing writes to `window_additional_charge` for these six types anymore. The Copilot pass was the smaller story, but it's a good reminder that review-comment cleanup isn't always just style: the accordion spacing looked like a nitpick until it was clear the base CSS rule itself was wrong.
